@@ -19,6 +19,25 @@ def shift_fixed_added(amount: float) -> str:
     )
 
 
+def admin_shift_closed(
+    *,
+    shift_id: int,
+    fixed: float,
+    bar_bonus: float,
+    fines: float = 0,
+) -> str:
+    lines = [
+        f"{e('check')} Смена #{h(shift_id)} закрыта",
+        "",
+        f"{e('money_bag')} Начислено: {h(format_money(fixed))} + {h(format_money(bar_bonus))} с бара",
+    ]
+    if fines > 0:
+        lines.append(f"{e('warning')} Штрафы: −{h(format_money(fines))}")
+        net = fixed + bar_bonus - fines
+        lines.append(f"{e('card')} К выплате за смену: {h(format_money(net))}")
+    return "\n".join(lines)
+
+
 def access_denied() -> str:
     return (
         f"{e('prohibited')} У вас нет доступа к этому боту.\n\n"
@@ -75,7 +94,6 @@ def help_admin_section() -> list[str]:
         f"{e('person')} Администратор:",
         f"• {e('money_bag')} Текущая смена — открытая или последняя закрытая",
         f"• {e('date')} За полмесяца — с 1 по 15 или с 16 по конец месяца",
-        f"• {e('card')} К выплате — баланс и итог за текущее полмесяц",
         f"• {e('warning')} Мои штрафы",
     ]
 
@@ -85,7 +103,8 @@ def help_manager_section() -> list[str]:
         "",
         f"{e('person')} Управляющий:",
         f"• {e('plus')} Добавить / {e('trash')} убрать админа",
-        f"• {e('people')} Команда, {e('chart')} ведомость, {e('chart_up')} рейтинг бара",
+        f"• {e('people')} Команда, {e('chart')} ведомость, {e('newspaper')} экспорт CSV",
+        f"• {e('chart_up')} рейтинг бара",
         f"• {e('warning')} Штраф / {e('trash')} убрать штраф",
         f"• {e('magnifier')} Карточка админа, {e('page')} отчёт смены",
         f"• {e('megaphone')} Рассылка всем админам",

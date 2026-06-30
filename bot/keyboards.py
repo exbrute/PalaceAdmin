@@ -14,7 +14,6 @@ BTN_CANCEL = "Отмена"
 BTN_HELP = "Помощь"
 BTN_SALARY = "Текущая смена"
 BTN_HALF_MONTH = "За полмесяца"
-BTN_NET = "К выплате"
 BTN_MY_FINES = "Мои штрафы"
 BTN_PROFILE = "Профиль"
 BTN_LINK = "Привязать аккаунт"
@@ -22,6 +21,7 @@ BTN_ADD_ADMIN = "Добавить админа"
 BTN_ADD_MANAGER = "Добавить управляющего"
 BTN_TEAM = "Команда"
 BTN_PAYROLL = "Ведомость"
+BTN_PAYROLL_EXPORT = "Экспорт ведомости"
 BTN_LEADERBOARD = "Рейтинг бара"
 BTN_BAR_PERCENT = "% бара"
 BTN_BROADCAST = "Рассылка"
@@ -36,7 +36,6 @@ BTN_SHIFT_REPORT = "Отчёт смены"
 ADMIN_BUTTONS = {
     BTN_SALARY,
     BTN_HALF_MONTH,
-    BTN_NET,
     BTN_MY_FINES,
     BTN_PROFILE,
     BTN_LINK,
@@ -50,6 +49,7 @@ MANAGER_BUTTONS = ADMIN_BUTTONS | {
     BTN_REMOVE_ADMIN,
     BTN_TEAM,
     BTN_PAYROLL,
+    BTN_PAYROLL_EXPORT,
     BTN_LEADERBOARD,
     BTN_BAR_PERCENT,
     BTN_BROADCAST,
@@ -105,7 +105,6 @@ ALL_MENU_BUTTONS = frozenset({
     BTN_HELP,
     BTN_SALARY,
     BTN_HALF_MONTH,
-    BTN_NET,
     BTN_MY_FINES,
     BTN_PROFILE,
     BTN_LINK,
@@ -113,6 +112,7 @@ ALL_MENU_BUTTONS = frozenset({
     BTN_ADD_MANAGER,
     BTN_TEAM,
     BTN_PAYROLL,
+    BTN_PAYROLL_EXPORT,
     BTN_LEADERBOARD,
     BTN_BAR_PERCENT,
     BTN_BROADCAST,
@@ -156,8 +156,8 @@ def build_main_keyboard(
 
     rows = [
         [_btn(BTN_SALARY, "money_bag"), _btn(BTN_HALF_MONTH, "date")],
-        [_btn(BTN_NET, "card"), _btn(BTN_MY_FINES, "warning")],
-        [_btn(BTN_PROFILE, "person"), _btn(BTN_LINK, "link")],
+        [_btn(BTN_MY_FINES, "warning"), _btn(BTN_PROFILE, "person")],
+        [_btn(BTN_LINK, "link")],
     ]
 
     if manager:
@@ -168,7 +168,7 @@ def build_main_keyboard(
             [_btn(BTN_BAR_PERCENT, "burger"), _btn(BTN_BROADCAST, "megaphone")],
             [_btn(BTN_FINE, "label"), _btn(BTN_REMOVE_FINE, "trash")],
             [_btn(BTN_FINES_ALL, "folder"), _btn(BTN_SHIFT_REPORT, "page")],
-            [_btn(BTN_HALF_MONTH_TEST, "test")],
+            [_btn(BTN_HALF_MONTH_TEST, "test"), _btn(BTN_PAYROLL_EXPORT, "newspaper")],
         ]
         if developer:
             manager_rows.insert(0, [_btn(BTN_ADD_MANAGER, "person")])

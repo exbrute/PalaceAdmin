@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from telegram import Update
+from telegram import ReplyKeyboardRemove, Update
 from telegram.ext import ContextTypes
 
 from bot.config import Settings
@@ -22,8 +22,8 @@ from bot.keyboards import (
     BTN_HALF_MONTH,
     BTN_LINK,
     BTN_MY_FINES,
-    BTN_NET,
     BTN_PAYROLL,
+    BTN_PAYROLL_EXPORT,
     BTN_PROFILE,
     BTN_SALARY,
     BTN_HALF_MONTH_TEST,
@@ -165,7 +165,12 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         text = welcome_guest()
 
     keyboard = build_main_keyboard(telegram_id, settings, storage)
+    refresh = await update.message.reply_text("⏳", reply_markup=ReplyKeyboardRemove())
     await reply_message(update.message, text, reply_markup=keyboard)
+    try:
+        await refresh.delete()
+    except Exception:
+        pass
 
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -697,10 +702,6 @@ async def _handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await admin.half_month(update, context)
         return
 
-    if text == BTN_NET:
-        await admin.net(update, context)
-        return
-
     if text == BTN_MY_FINES:
         await admin.myfines(update, context)
         return
@@ -759,6 +760,10 @@ async def _handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if text == BTN_PAYROLL:
         await _manager_action(update, context, manager.payroll)
+        return
+
+    if text == BTN_PAYROLL_EXPORT:
+        await _manager_action(update, context, manager.payroll_export)
         return
 
     if text == BTN_LEADERBOARD:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.bar_sales import notify_shift_fixed
+from bot.bar_sales import notify_admin_shift_closed
 from bot.messaging import reply as reply_message, send as send_message
 from bot.emojis import e
 from bot.half_month_report import build_current_half_month_test_report
@@ -19,6 +19,7 @@ from bot.ledger import (
     sync_all_admins,
     sync_shift_by_id,
 )
+from bot.payroll_export import prepare_payroll_csv
 from bot.pay_period import current_pay_period, today_in_timezone
 from bot.salary import format_money
 from bot.services import find_shift, format_percent, get_bar_bonus_percent, set_bar_bonus_percent
@@ -238,7 +239,7 @@ async def shiftreport(
         await reply_message(update.message, f"{e('cancel')} Смена #{shift_id} не найдена")
         return
     if fixed is not None:
-        await notify_shift_fixed(context, link.telegram_id, fixed)
+        await notify_admin_shift_closed(context, storage, link.telegram_id, shift_id)
 
     name = Storage.admin_name(link)
     await reply_message(
@@ -471,6 +472,43 @@ async def payroll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     lines.extend(["", f"{e('money')} Итого за полмесяца: {format_money(total_net)}"])
     await reply_message(update.message, "\n".join(lines))
+
+
+async def payroll_export(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await require_manager(update, context):
+        return
+
+    settings = context.application.bot_data["settings"]
+    api: LangameClient = context.application.bot_data["api"]
+    storage: Storage = context.application.bot_data["storage"]
+    today = today_in_timezone(settings.settlement_timezone)
+    period = current_pay_period(today)
+
+    csv_content, error = await prepare_payroll_csv(api, storage, settings, period)
+    if error or csv_content is None:
+        await reply_message(update.message, error or "Не удалось сформировать ведомость")
+        return
+
+    from io import BytesIO
+
+    from telegram.constants import ParseMode
+
+    filename = f"vedomost_{period.cycle_key}.csv"
+    buffer = BytesIO(csv_content.encode("utf-8-sig"))
+    buffer.name = filename
+    caption = (
+        f"{e('chart')} Ведомость за {period.half_label}\n"
+        f"{e('date')} {period.date_from.strftime('%d.%m.%Y')} — "
+        f"{period.date_to.strftime('%d.%m.%Y')}"
+    )
+    keyboard = build_main_keyboard(update.effective_user.id, settings, storage)
+    await update.message.reply_document(
+        document=buffer,
+        filename=filename,
+        caption=caption,
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
+    )
 
 
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

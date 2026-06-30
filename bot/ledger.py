@@ -62,7 +62,7 @@ def sync_admin_shifts(
     storage: Storage,
     settings: Settings,
     link: UserLink,
-) -> tuple[int, str | None, list[float]]:
+) -> tuple[int, str | None, list[int]]:
     if link.user_id == 0:
         return 0, f"{e('link')} Привяжите LANGAME — кнопка «Привязать аккаунт». Без этого бот не узнает ваши смены.", []
 
@@ -73,7 +73,7 @@ def sync_admin_shifts(
 
     user_shifts = filter_shifts_for_user(all_shifts, link.user_id, only_closed=True)
     synced = 0
-    fixed_amounts: list[float] = []
+    synced_shift_ids: list[int] = []
 
     for shift in user_shifts:
         if storage.has_shift_earning(shift.id):
@@ -83,7 +83,7 @@ def sync_admin_shifts(
         try:
             sales = api.get_product_sales(date_from=date_from, date_to=date_to)
         except LangameApiError as exc:
-            return synced, str(exc), fixed_amounts
+            return synced, str(exc), synced_shift_ids
 
         bar_total, bar_bonus, fixed, gross, sales_count = calculate_shift_stats(
             shift, sales, settings, storage
@@ -101,9 +101,9 @@ def sync_admin_shifts(
             sales_count=sales_count,
         )
         synced += 1
-        fixed_amounts.append(fixed)
+        synced_shift_ids.append(shift.id)
 
-    return synced, None, fixed_amounts
+    return synced, None, synced_shift_ids
 
 
 def sync_shift_by_id(

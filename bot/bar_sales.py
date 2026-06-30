@@ -9,11 +9,10 @@ from bot.config import Settings
 from bot.langame_api import LangameApiError, LangameClient
 from bot.messaging import send as send_message
 from bot.ledger import sync_admin_shifts
-from bot.salary import format_money
 from bot.services import get_bar_bonus_percent
 from bot.storage import ROLE_ADMIN, Storage
 from bot.shift_notify import poll_shift_notifications
-from bot.texts import bar_bonus_added, shift_fixed_added
+from bot.texts import admin_shift_closed, bar_bonus_added
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +23,13 @@ def _user_to_telegram(storage: Storage) -> dict[int, int]:
         if link.user_id:
             mapping[link.user_id] = link.telegram_id
     return mapping
+
+
+def _shift_bar_bonus(storage: Storage, telegram_id: int, shift_id: int, fallback: float) -> float:
+    instant = storage.sum_bar_sale_credits_for_shift(telegram_id, shift_id)
+    if instant > 0:
+        return instant
+    return fallback
 
 
 def sync_new_bar_sales(
@@ -83,6 +89,29 @@ def sync_new_bar_sales(
     return credited
 
 
+async def notify_admin_shift_closed(
+    context: ContextTypes.DEFAULT_TYPE,
+    storage: Storage,
+    telegram_id: int,
+    shift_id: int,
+) -> None:
+    earning = storage.get_shift_earning(shift_id)
+    if earning is None:
+        return
+    bar_bonus = _shift_bar_bonus(storage, telegram_id, shift_id, earning.bar_bonus)
+    fines = storage.sum_fines(telegram_id, shift_id)
+    text = admin_shift_closed(
+        shift_id=shift_id,
+        fixed=earning.fixed_salary,
+        bar_bonus=bar_bonus,
+        fines=fines,
+    )
+    try:
+        await send_message(context, telegram_id, text)
+    except Exception as exc:
+        logger.warning("Failed to notify admin %s about shift #%s: %s", telegram_id, shift_id, exc)
+
+
 async def poll_bar_sales(context: ContextTypes.DEFAULT_TYPE) -> None:
     settings: Settings = context.application.bot_data["settings"]
     api: LangameClient = context.application.bot_data["api"]
@@ -101,22 +130,11 @@ async def poll_bar_sales(context: ContextTypes.DEFAULT_TYPE) -> None:
     for link in storage.list_links(ROLE_ADMIN):
         if link.user_id == 0:
             continue
-        _, error, fixed_amounts = sync_admin_shifts(api, storage, settings, link)
+        _, error, synced_shift_ids = sync_admin_shifts(api, storage, settings, link)
         if error:
             logger.warning("Shift sync failed for %s: %s", link.telegram_id, error)
             continue
-        for fixed in fixed_amounts:
-            await notify_shift_fixed(context, link.telegram_id, fixed)
+        for shift_id in synced_shift_ids:
+            await notify_admin_shift_closed(context, storage, link.telegram_id, shift_id)
 
     await poll_shift_notifications(context)
-
-
-async def notify_shift_fixed(
-    context: ContextTypes.DEFAULT_TYPE,
-    telegram_id: int,
-    amount: float,
-) -> None:
-    try:
-        await send_message(context, telegram_id, shift_fixed_added(amount))
-    except Exception as exc:
-        logger.warning("Failed to notify shift fixed for %s: %s", telegram_id, exc)

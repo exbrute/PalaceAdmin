@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from datetime import date
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.bar_sales import notify_shift_fixed
 from bot.emojis import e
-from bot.messaging import reply as reply_message
 from bot.keyboards import build_main_keyboard
 from bot.langame_api import LangameApiError, LangameClient
+from bot.messaging import reply as reply_message
 from bot.ledger import (
     format_current_shift_summary,
     format_earning_line,
@@ -17,7 +18,7 @@ from bot.ledger import (
     sync_admin_shifts,
     sync_shift_by_id,
 )
-from bot.pay_period import current_pay_period, format_pay_period_header, today_in_timezone
+from bot.pay_period import current_pay_period, today_in_timezone
 from bot.roles import has_manager_access, is_developer, require_langame_link, require_link, require_manager, role_label
 from bot.salary import format_money, resolve_langame_user
 from bot.storage import ROLE_ADMIN, Storage
@@ -39,12 +40,10 @@ async def _sync_and_reply_error(
     settings = context.application.bot_data["settings"]
     api: LangameClient = context.application.bot_data["api"]
     storage: Storage = context.application.bot_data["storage"]
-    _, error, fixed_amounts = sync_admin_shifts(api, storage, settings, link)
+    _, error, _ = sync_admin_shifts(api, storage, settings, link)
     if error:
         await _reply(update, context, error)
         return False
-    for fixed in fixed_amounts:
-        await notify_shift_fixed(context, link.telegram_id, fixed)
     return True
 
 
@@ -83,15 +82,13 @@ async def shift(update: Update, context: ContextTypes.DEFAULT_TYPE, shift_id: in
     api: LangameClient = context.application.bot_data["api"]
     storage: Storage = context.application.bot_data["storage"]
 
-    earning, error, fixed = sync_shift_by_id(api, storage, settings, link, shift_id)
+    earning, error, _fixed = sync_shift_by_id(api, storage, settings, link, shift_id)
     if error:
         await _reply(update, context, error)
         return
     if earning is None:
         await _reply(update, context, f"{e('cancel')} Смена #{shift_id} не найдена")
         return
-    if fixed is not None:
-        await notify_shift_fixed(context, link.telegram_id, fixed)
 
     await _reply(update, context, format_earning_line(storage, earning, settings))
 
@@ -150,49 +147,6 @@ async def half_month(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         period.title,
         next_payout=period.next_payout,
     )
-
-
-async def net(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    link = await require_link(update, context)
-    if link is None:
-        return
-
-    settings = context.application.bot_data["settings"]
-    api: LangameClient = context.application.bot_data["api"]
-    storage: Storage = context.application.bot_data["storage"]
-
-    if link.user_id:
-        if not await _sync_and_reply_error(update, context, link):
-            return
-
-    balance = get_admin_balance(storage, link.telegram_id)
-    name = link.username or str(link.telegram_id)
-
-    today = today_in_timezone(settings.settlement_timezone)
-    period = current_pay_period(today)
-    period_summary = get_period_summary(
-        storage, link.telegram_id, period.date_from, period.date_to
-    )
-
-    lines = [
-        f"{e('card')} Баланс — {name}",
-        "",
-        f"{e('money_bag')} Баланс в боте: {format_money(balance.balance)}",
-        f"{e('check')} За смены: {format_money(balance.shift_earned)} ({balance.shifts_count} смен)",
-        f"{e('burger')} С бара сразу: {format_money(balance.bar_bonus_instant)}",
-        f"{e('warning')} Штрафы: −{format_money(balance.fines_total)}",
-        "",
-        format_pay_period_header(period),
-        f"{e('gear')} Смен: {len(period_summary.earnings)}",
-        f"{e('chart_up')} Начислено: {format_money(period_summary.gross_earned)}",
-        f"{e('warning')} Штрафы за период: −{format_money(period_summary.fines_total)}",
-        f"{e('money_bag')} Итого за полмесяца: {format_money(period_summary.net_amount)}",
-    ]
-
-    if link.user_id == 0:
-        lines.insert(2, f"{e('link')} LANGAME не привязан — новые смены не синхронизируются.")
-
-    await _reply(update, context, "\n".join(lines))
 
 
 async def myfines(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
