@@ -1,0 +1,15 @@
+[Unit]
+Description=Palace Adms Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/palace-adms
+EnvironmentFile=/opt/palace-adms/.env
+ExecStart=/opt/palace-adms/.venv/bin/python -m bot.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
