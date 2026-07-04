@@ -74,7 +74,8 @@ def welcome_admin(*, langame_linked: bool, bar_bonus_percent: float, fixed_salar
     pct = format_percent(bar_bonus_percent)
     text = (
         f"{e('wave')} Привет! Я считаю вашу зарплату.\n\n"
-        f"{e('money')} {h(format_money(fixed_salary))} за смену\n"
+        f"{e('money')} {h(format_money(fixed_salary))} за клубную смену (12 ч)\n"
+        f"   работа по часам + {h(format_money(500))} уборка первому админу\n"
         f"{e('burger')} + {h(pct)}% от продаж бара — сразу при продаже\n"
         f"{e('date')} Выплаты: 16-го (за 1–15) и 1-го (за 16–конец месяца)\n\n"
         f"{e('phone')} Выберите действие в меню."
@@ -92,7 +93,8 @@ def help_header(*, bar_bonus_percent: float, fixed_salary: float) -> str:
     pct = format_percent(bar_bonus_percent)
     return (
         f"{e('book')} Palace Adms — зарплата администраторов\n"
-        f"{e('money')} {h(format_money(fixed_salary))} за смену + {e('burger')} {h(pct)}% от бара\n"
+        f"{e('money')} {h(format_money(fixed_salary))} за клубную смену (12 ч) + {e('burger')} {h(pct)}% от бара\n"
+        f"   работа по часам, уборка {h(format_money(500))} — первому админу\n"
         f"{e('date')} Выплаты: 16-го (1–15) и 1-го (16–конец месяца)"
     )
 
@@ -111,6 +113,7 @@ def help_manager_section() -> list[str]:
     return [
         "",
         f"{e('person')} Управляющий:",
+        f"• {e('money_bag')} Текущая смена — кто из админов сейчас на смене",
         f"• {e('plus')} Добавить / {e('trash')} убрать админа",
         f"• {e('people')} Команда, {e('chart')} ведомость, {e('newspaper')} экспорт CSV",
         f"• {e('chart_up')} рейтинг бара",
@@ -118,7 +121,6 @@ def help_manager_section() -> list[str]:
         f"• {e('magnifier')} Карточка админа, {e('page')} отчёт смены",
         f"• {e('megaphone')} Рассылка всем админам",
         f"• {e('burger')} % бара — настройка процента с продаж",
-        f"• {e('test')} Тест полмесяца — тестовый отчёт всем управляющим",
     ]
 
 
@@ -167,6 +169,10 @@ def no_shifts_yet() -> str:
         f"{e('folder')} Нет открытой смены и закрытых смен пока нет. "
         "После смены в LANGAME нажмите снова."
     )
+
+
+def no_open_admin_shift() -> str:
+    return f"{e('folder')} Сейчас ни один администратор не на смене."
 
 
 def settlement_notice(amount: float, when: str) -> str:

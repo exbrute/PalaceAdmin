@@ -2,12 +2,18 @@
 """Remove bar credits and recalculate shifts for non-bar (закупка) sales."""
 from __future__ import annotations
 
+import sys
 from datetime import datetime
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from bot.config import get_settings
 from bot.langame_api import LangameClient, sale_counts_as_bar
-from bot.ledger import calculate_shift_stats, shift_eligible_for_earnings
-from bot.salary import shift_date_range
+from bot.ledger import recalculate_club_shift_group, shift_eligible_for_earnings
+from bot.shift_fixed import club_shift_key
 from bot.storage import Storage
 
 
@@ -47,41 +53,26 @@ def main() -> None:
             for shift in api.get_working_shifts()
             if shift_eligible_for_earnings(shift, settings)
         }
-        recalculated = 0
+        keys: set[str] = set()
         for row in storage._conn.execute("SELECT shift_id FROM shift_earnings").fetchall():
-            shift_id = int(row["shift_id"])
-            shift = shifts.get(shift_id)
+            shift = shifts.get(int(row["shift_id"]))
             if shift is None:
                 continue
-            d_from, d_to = shift_date_range(shift)
-            shift_sales = api.get_product_sales(date_from=d_from, date_to=d_to)
-            bar_total, bar_bonus, fixed, gross, sales_count = calculate_shift_stats(
-                shift, shift_sales, settings, storage
-            )
-            storage._conn.execute(
-                """
-                UPDATE shift_earnings
-                SET bar_sales = ?,
-                    bar_bonus = ?,
-                    fixed_salary = ?,
-                    gross_amount = ?,
-                    sales_count = ?,
-                    synced_at = ?
-                WHERE shift_id = ?
-                """,
-                (
-                    bar_total,
-                    bar_bonus,
-                    fixed,
-                    gross,
-                    sales_count,
-                    datetime.now().isoformat(timespec="seconds"),
-                    shift_id,
-                ),
-            )
-            recalculated += 1
+            key = club_shift_key(shift, settings)
+            if key:
+                keys.add(key)
 
-        storage._conn.commit()
+        recalculated = 0
+        for club_key in sorted(keys):
+            _, error = recalculate_club_shift_group(
+                api, storage, settings, list(shifts.values()), club_key
+            )
+            if error:
+                raise SystemExit(error)
+            recalculated += storage._conn.execute(
+                "SELECT COUNT(*) FROM shift_earnings WHERE club_shift_key = ?",
+                (club_key,),
+            ).fetchone()[0]
 
         print(f"non_bar_sales={len(non_bar_sales)}")
         print(f"removed_credits={removed_credits} removed_bonus={removed_bonus:.2f}")

@@ -26,7 +26,6 @@ from bot.keyboards import (
     BTN_PAYROLL_EXPORT,
     BTN_PROFILE,
     BTN_SALARY,
-    BTN_HALF_MONTH_TEST,
     BTN_SHIFT_REPORT,
     BTN_TEAM,
     STATE_ADD_ADMIN_NAME,
@@ -189,10 +188,11 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             bar_bonus_percent=bar_percent,
             fixed_salary=settings.fixed_salary,
         ),
-        *help_admin_section(),
     ]
     if staff_access:
         lines.extend(help_manager_section())
+    else:
+        lines.extend(help_admin_section())
     if developer_access:
         lines.extend(help_developer_section())
 
@@ -692,6 +692,9 @@ async def _handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not await require_access(update, context):
         return
 
+    settings: Settings = context.application.bot_data["settings"]
+    storage: Storage = context.application.bot_data["storage"]
+
     text = button or raw_text
 
     if text == BTN_SALARY:
@@ -699,10 +702,14 @@ async def _handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if text == BTN_HALF_MONTH:
+        if has_manager_access(settings, storage, update.effective_user.id):
+            return
         await admin.half_month(update, context)
         return
 
     if text == BTN_MY_FINES:
+        if has_manager_access(settings, storage, update.effective_user.id):
+            return
         await admin.myfines(update, context)
         return
 
@@ -784,10 +791,6 @@ async def _handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "Введите новый процент (0–100):",
             reply_markup=build_cancel_keyboard(),
         )
-        return
-
-    if text == BTN_HALF_MONTH_TEST:
-        await _manager_action(update, context, manager.test_half_month)
         return
 
     if text == BTN_FINES_ALL:

@@ -30,7 +30,6 @@ BTN_REMOVE_FINE = "Убрать штраф"
 BTN_FINES_ALL = "Все штрафы"
 BTN_REMOVE_ADMIN = "Убрать админа"
 BTN_ADMIN_CARD = "Карточка админа"
-BTN_HALF_MONTH_TEST = "Тест полмесяца"
 BTN_SHIFT_REPORT = "Отчёт смены"
 
 ADMIN_BUTTONS = {
@@ -44,7 +43,7 @@ ADMIN_BUTTONS = {
     BTN_CANCEL,
 }
 
-MANAGER_BUTTONS = ADMIN_BUTTONS | {
+MANAGER_BUTTONS = (ADMIN_BUTTONS - {BTN_HALF_MONTH, BTN_MY_FINES}) | {
     BTN_ADD_ADMIN,
     BTN_REMOVE_ADMIN,
     BTN_TEAM,
@@ -57,7 +56,6 @@ MANAGER_BUTTONS = ADMIN_BUTTONS | {
     BTN_REMOVE_FINE,
     BTN_FINES_ALL,
     BTN_ADMIN_CARD,
-    BTN_HALF_MONTH_TEST,
     BTN_SHIFT_REPORT,
 }
 
@@ -120,7 +118,6 @@ ALL_MENU_BUTTONS = frozenset({
     BTN_REMOVE_FINE,
     BTN_FINES_ALL,
     BTN_ADMIN_CARD,
-    BTN_HALF_MONTH_TEST,
     BTN_SHIFT_REPORT,
     BTN_REMOVE_ADMIN,
 })
@@ -154,10 +151,15 @@ def build_main_keyboard(
     manager = has_manager_access(settings, storage, telegram_id)
     developer = is_developer(settings, telegram_id)
 
-    rows = [
-        [_btn(BTN_SALARY, "money_bag"), _btn(BTN_HALF_MONTH, "date")],
-        [_btn(BTN_MY_FINES, "warning"), _btn(BTN_PROFILE, "person")],
-    ]
+    if manager:
+        rows = [
+            [_btn(BTN_SALARY, "money_bag"), _btn(BTN_PROFILE, "person")],
+        ]
+    else:
+        rows = [
+            [_btn(BTN_SALARY, "money_bag"), _btn(BTN_HALF_MONTH, "date")],
+            [_btn(BTN_MY_FINES, "warning"), _btn(BTN_PROFILE, "person")],
+        ]
     if needs_langame_link(settings, storage, telegram_id):
         rows.append([_btn(BTN_LINK, "link")])
 
@@ -169,7 +171,7 @@ def build_main_keyboard(
             [_btn(BTN_BAR_PERCENT, "burger"), _btn(BTN_BROADCAST, "megaphone")],
             [_btn(BTN_FINE, "label"), _btn(BTN_REMOVE_FINE, "trash")],
             [_btn(BTN_FINES_ALL, "folder"), _btn(BTN_SHIFT_REPORT, "page")],
-            [_btn(BTN_HALF_MONTH_TEST, "test"), _btn(BTN_PAYROLL_EXPORT, "newspaper")],
+            [_btn(BTN_PAYROLL_EXPORT, "newspaper")],
         ]
         if developer:
             manager_rows.insert(0, [_btn(BTN_ADD_MANAGER, "person")])

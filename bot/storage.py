@@ -52,6 +52,10 @@ class ShiftEarning:
     gross_amount: float
     sales_count: int
     synced_at: str
+    worked_hours: float
+    fixed_work: float
+    fixed_cleaning: float
+    club_shift_key: str | None
 
 
 @dataclass(frozen=True)
@@ -118,6 +122,10 @@ class Storage:
         )
         self._ensure_column("admin_links", "role", "TEXT NOT NULL DEFAULT 'admin'")
         self._ensure_column("fines", "telegram_id", "INTEGER")
+        self._ensure_column("shift_earnings", "worked_hours", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "fixed_work", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "fixed_cleaning", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "club_shift_key", "TEXT")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS shift_earnings (
@@ -518,7 +526,7 @@ class Storage:
             return None
         return self._row_to_shift_earning(row)
 
-    def add_shift_earning(
+    def upsert_shift_earning(
         self,
         shift_id: int,
         telegram_id: int,
@@ -530,15 +538,36 @@ class Storage:
         fixed_salary: float,
         gross_amount: float,
         sales_count: int,
-    ) -> None:
+        worked_hours: float,
+        fixed_work: float,
+        fixed_cleaning: float,
+        club_shift_key: str | None,
+    ) -> bool:
         synced_at = datetime.now().isoformat(timespec="seconds")
+        existed = self.has_shift_earning(shift_id)
         self._conn.execute(
             """
             INSERT INTO shift_earnings (
                 shift_id, telegram_id, langame_user_id, shift_start, shift_stop,
-                bar_sales, bar_bonus, fixed_salary, gross_amount, sales_count, synced_at
+                bar_sales, bar_bonus, fixed_salary, gross_amount, sales_count, synced_at,
+                worked_hours, fixed_work, fixed_cleaning, club_shift_key
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(shift_id) DO UPDATE SET
+                telegram_id = excluded.telegram_id,
+                langame_user_id = excluded.langame_user_id,
+                shift_start = excluded.shift_start,
+                shift_stop = excluded.shift_stop,
+                bar_sales = excluded.bar_sales,
+                bar_bonus = excluded.bar_bonus,
+                fixed_salary = excluded.fixed_salary,
+                gross_amount = excluded.gross_amount,
+                sales_count = excluded.sales_count,
+                synced_at = excluded.synced_at,
+                worked_hours = excluded.worked_hours,
+                fixed_work = excluded.fixed_work,
+                fixed_cleaning = excluded.fixed_cleaning,
+                club_shift_key = excluded.club_shift_key
             """,
             (
                 shift_id,
@@ -552,9 +581,48 @@ class Storage:
                 gross_amount,
                 sales_count,
                 synced_at,
+                worked_hours,
+                fixed_work,
+                fixed_cleaning,
+                club_shift_key,
             ),
         )
         self._conn.commit()
+        return not existed
+
+    def add_shift_earning(
+        self,
+        shift_id: int,
+        telegram_id: int,
+        langame_user_id: int,
+        shift_start: str | None,
+        shift_stop: str | None,
+        bar_sales: float,
+        bar_bonus: float,
+        fixed_salary: float,
+        gross_amount: float,
+        sales_count: int,
+        worked_hours: float = 0.0,
+        fixed_work: float = 0.0,
+        fixed_cleaning: float = 0.0,
+        club_shift_key: str | None = None,
+    ) -> None:
+        self.upsert_shift_earning(
+            shift_id=shift_id,
+            telegram_id=telegram_id,
+            langame_user_id=langame_user_id,
+            shift_start=shift_start,
+            shift_stop=shift_stop,
+            bar_sales=bar_sales,
+            bar_bonus=bar_bonus,
+            fixed_salary=fixed_salary,
+            gross_amount=gross_amount,
+            sales_count=sales_count,
+            worked_hours=worked_hours,
+            fixed_work=fixed_work,
+            fixed_cleaning=fixed_cleaning,
+            club_shift_key=club_shift_key,
+        )
 
     def list_shift_earnings(
         self,
@@ -813,6 +881,7 @@ class Storage:
 
     @staticmethod
     def _row_to_shift_earning(row: sqlite3.Row) -> ShiftEarning:
+        keys = row.keys()
         return ShiftEarning(
             shift_id=int(row["shift_id"]),
             telegram_id=int(row["telegram_id"]),
@@ -825,6 +894,10 @@ class Storage:
             gross_amount=float(row["gross_amount"]),
             sales_count=int(row["sales_count"]),
             synced_at=str(row["synced_at"]),
+            worked_hours=float(row["worked_hours"]) if "worked_hours" in keys else 0.0,
+            fixed_work=float(row["fixed_work"]) if "fixed_work" in keys else float(row["fixed_salary"]),
+            fixed_cleaning=float(row["fixed_cleaning"]) if "fixed_cleaning" in keys else 0.0,
+            club_shift_key=row["club_shift_key"] if "club_shift_key" in keys else None,
         )
 
     @staticmethod

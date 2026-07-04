@@ -12,6 +12,7 @@ from bot.messaging import reply as reply_message
 from bot.ledger import (
     format_current_shift_summary,
     format_earning_line,
+    format_manager_current_shift_summary,
     format_period_summary,
     get_admin_balance,
     get_period_summary,
@@ -22,7 +23,7 @@ from bot.pay_period import current_pay_period, today_in_timezone
 from bot.roles import has_manager_access, is_developer, require_langame_link, require_link, require_manager, role_label
 from bot.salary import format_money, resolve_langame_user
 from bot.storage import ROLE_ADMIN, Storage
-from bot.texts import langame_linked, no_fines, no_shifts_yet
+from bot.texts import langame_linked, no_fines, no_open_admin_shift, no_shifts_yet
 
 
 async def _reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
@@ -48,13 +49,22 @@ async def _sync_and_reply_error(
 
 
 async def salary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    link = await require_langame_link(update, context)
-    if link is None:
-        return
-
     settings = context.application.bot_data["settings"]
     api: LangameClient = context.application.bot_data["api"]
     storage: Storage = context.application.bot_data["storage"]
+    telegram_id = update.effective_user.id
+
+    if has_manager_access(settings, storage, telegram_id):
+        summary = format_manager_current_shift_summary(api, storage, settings)
+        if summary is None:
+            await _reply(update, context, no_open_admin_shift())
+            return
+        await _reply(update, context, summary)
+        return
+
+    link = await require_langame_link(update, context)
+    if link is None:
+        return
 
     if not await _sync_and_reply_error(update, context, link):
         return
