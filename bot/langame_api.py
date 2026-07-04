@@ -40,6 +40,96 @@ class WorkingShift:
     close_message: str | None = None
 
 
+def shift_nal_revenue(shift: WorkingShift) -> float:
+    return shift.cash_nal - shift.refunds_nal
+
+
+def shift_beznal_revenue(shift: WorkingShift) -> float:
+    return (
+        shift.cash_beznal
+        + shift.mobile_pay
+        + shift.yandex_pay
+        - shift.refunds_beznal
+    )
+
+
+def shift_total_revenue(shift: WorkingShift) -> float:
+    return shift_nal_revenue(shift) + shift_beznal_revenue(shift)
+
+
+def _transaction_is_beznal(item: dict[str, Any]) -> bool:
+    # Beznal=1 — карта/QR/безнал; mobile=1 — оплата через приложение (часть безнала).
+    # payment_1C — служебный флаг, не способ оплаты (нал тоже может быть payment_1C=1).
+    return _float(item.get("Beznal")) > 0 or _float(item.get("mobile")) > 0
+
+
+def _live_shift_nal_beznal(
+    client: LangameClient,
+    shift: WorkingShift,
+    date_from: date,
+    date_to: date,
+) -> tuple[float, float]:
+    """Match admin PC: popolneniya + product sales split by nal/beznal flags."""
+    try:
+        transactions = client.get_transactions(date_from=date_from, date_to=date_to)
+        sales = client.get_product_sales(date_from=date_from, date_to=date_to)
+    except LangameApiError:
+        return 0.0, 0.0
+
+    tx_nal = 0.0
+    tx_beznal = 0.0
+    for transaction in transactions:
+        if transaction.working_shift_id != shift.id or transaction.cancel != 0:
+            continue
+        if transaction.balance <= 0:
+            continue
+        if transaction.is_beznal:
+            if transaction.is_admin and not transaction.is_soft:
+                tx_beznal += transaction.balance
+        else:
+            tx_nal += transaction.balance
+
+    prod_nal = 0.0
+    prod_beznal = 0.0
+    for sale in sales:
+        if sale.working_shift_id != shift.id or sale.cancel != 0:
+            continue
+        if sale.is_beznal:
+            if not sale.from_magazine and sale.payment_1c:
+                prod_beznal += sale.amount
+        else:
+            prod_nal += sale.amount
+
+    return tx_nal + prod_nal, tx_beznal + prod_beznal
+
+
+def resolve_shift_nal_beznal(
+    client: LangameClient,
+    shift: WorkingShift,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> tuple[float, float]:
+    nal = shift_nal_revenue(shift)
+    beznal = shift_beznal_revenue(shift)
+    if nal + beznal > 0:
+        return max(0.0, nal), max(0.0, beznal)
+
+    if date_from is None or date_to is None:
+        return 0.0, 0.0
+
+    return _live_shift_nal_beznal(client, shift, date_from, date_to)
+
+
+def resolve_shift_total_revenue(
+    client: LangameClient,
+    shift: WorkingShift,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> float:
+    nal, beznal = resolve_shift_nal_beznal(client, shift, date_from, date_to)
+    return nal + beznal
+
+
 @dataclass(frozen=True)
 class ProductSale:
     id: int
@@ -50,6 +140,13 @@ class ProductSale:
     count: int
     cancel: int
     date: datetime
+    is_beznal: bool = False
+    from_magazine: bool = False
+    payment_1c: bool = False
+
+    @property
+    def amount(self) -> float:
+        return self.price_sale * self.count
 
 
 @dataclass(frozen=True)
@@ -60,6 +157,9 @@ class MoneyTransaction:
     balance: float
     cancel: int
     date_update: datetime | None
+    is_beznal: bool = False
+    is_admin: bool = False
+    is_soft: bool = False
 
 
 class LangameClient:
@@ -183,6 +283,9 @@ class LangameClient:
                     count=int(item.get("count") or 0),
                     cancel=int(item.get("cancel") or 0),
                     date=_parse_datetime(item.get("date")) or datetime.min,
+                    is_beznal=int(item.get("beznal") or 0) > 0,
+                    from_magazine=int(item.get("from_magazine") or 0) > 0,
+                    payment_1c=int(item.get("payment_1C") or 0) > 0,
                 )
             )
         return sales
@@ -224,6 +327,9 @@ class LangameClient:
                     balance=float(item.get("balance") or 0),
                     cancel=int(item.get("cancel") or 0),
                     date_update=_parse_datetime(item.get("date_update")),
+                    is_beznal=_transaction_is_beznal(item),
+                    is_admin=str(item.get("admin") or "") == "1",
+                    is_soft=str(item.get("soft") or "") == "1",
                 )
             )
         return transactions

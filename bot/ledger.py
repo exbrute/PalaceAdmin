@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 from bot.emojis import e
 from bot.config import Settings
-from bot.langame_api import LangameApiError, LangameClient, ProductSale, WorkingShift, sale_counts_as_bar
+from bot.langame_api import LangameApiError, LangameClient, ProductSale, WorkingShift, resolve_shift_nal_beznal, sale_counts_as_bar
 from bot.salary import (
     filter_shifts_for_user,
     format_money,
@@ -432,7 +432,9 @@ def format_manager_current_shift_summary(
 
     sections: list[str] = []
     for shift, link in open_shifts:
-        body = format_open_shift_line(api, storage, settings, link, shift)
+        body = format_open_shift_line(
+            api, storage, settings, link, shift, include_revenue_share=True
+        )
         if body is None:
             continue
         admin_name = Storage.admin_name(link)
@@ -447,6 +449,8 @@ def format_open_shift_line(
     settings: Settings,
     link: UserLink,
     shift: WorkingShift,
+    *,
+    include_revenue_share: bool = False,
 ) -> str | None:
     try:
         all_shifts = api.get_working_shifts()
@@ -490,9 +494,24 @@ def format_open_shift_line(
         f"{e('gear')} Смена #{shift.id}",
         f"{e('date')} Начало: {start}",
         f"{e('burger')} Продажи бара: {format_money(bar_total)} ({sales_count} поз.)",
+    ]
+    if include_revenue_share:
+        nal, beznal = resolve_shift_nal_beznal(api, shift, date_from, date_to)
+        total_revenue = nal + beznal
+        if total_revenue > 0:
+            bar_share = bar_total / total_revenue * 100
+            lines.extend([
+                f"{e('money')} Нал: {format_money(nal)}",
+                f"{e('card')} Безнал: {format_money(beznal)}",
+                f"{e('chart_up')} Общая выручка: {format_money(total_revenue)}",
+                f"{e('chart')} Бар от выручки: {format_percent(bar_share)}%",
+            ])
+        else:
+            lines.append(f"{e('chart')} Бар от выручки: — (выручка пока 0 ₽)")
+    lines.extend([
         f"{e('money')} {bar_percent}% с бара: {format_money(bar_bonus)} — начисляется сразу",
         f"{e('refresh')} Фикс (ориентир): {fixed_text} — после закрытия",
-    ]
+    ])
     if len(group) > 1:
         lines.append(f"{e('info')} В клубной смене {len(group)} админов — фикс пересчитается по часам")
     if fines:

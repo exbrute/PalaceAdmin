@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from bot.config import Settings
-from bot.langame_api import LangameApiError, LangameClient, WorkingShift
+from bot.langame_api import LangameApiError, LangameClient, WorkingShift, shift_total_revenue
 from bot.ledger import calculate_shift_stats, sync_shift_by_id
 from bot.salary import shift_date_range
 from bot.storage import Storage, UserLink
@@ -19,17 +19,6 @@ class ShiftCloseReport:
     fixed: float
     bar_bonus: float
     fines: float
-
-
-def shift_total_revenue(shift: WorkingShift) -> float:
-    return (
-        shift.cash_nal
-        + shift.cash_beznal
-        + shift.mobile_pay
-        + shift.yandex_pay
-        - shift.refunds_nal
-        - shift.refunds_beznal
-    )
 
 
 def shift_cash_in_register(shift: WorkingShift) -> float:
