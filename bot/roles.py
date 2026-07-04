@@ -79,6 +79,13 @@ def role_label(role: str | None) -> str:
     return "Не привязан"
 
 
+def needs_langame_link(settings: Settings, storage: Storage, telegram_id: int) -> bool:
+    link = storage.get_link(telegram_id)
+    if link is not None:
+        return link.user_id == 0
+    return has_manager_access(settings, storage, telegram_id)
+
+
 async def deny_access(update: Update) -> None:
     await reply_message(update.message, access_denied())
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -43,6 +44,8 @@ class WorkingShift:
 class ProductSale:
     id: int
     working_shift_id: int
+    product_id: int
+    product_name: str
     price_sale: float
     count: int
     cancel: int
@@ -67,6 +70,7 @@ class LangameClient:
             headers={"X-Request-Token": settings.langame_api_token},
             timeout=30.0,
         )
+        self._product_names_by_id: dict[int, str] | None = None
 
     def close(self) -> None:
         self._client.close()
@@ -164,13 +168,17 @@ class LangameClient:
             params["date_to"] = date_to.isoformat()
 
         raw = self._get_paginated("/products/expense", params or None)
+        product_names = self._get_product_names_by_id()
         sales: list[ProductSale] = []
         for item in raw:
             price = item.get("price_sale")
+            product_id = int(item.get("list_goods_id") or 0)
             sales.append(
                 ProductSale(
                     id=int(item["id"]),
                     working_shift_id=int(item["working_shift_id"]),
+                    product_id=product_id,
+                    product_name=product_names.get(product_id, ""),
                     price_sale=float(price or 0),
                     count=int(item.get("count") or 0),
                     cancel=int(item.get("cancel") or 0),
@@ -178,6 +186,19 @@ class LangameClient:
                 )
             )
         return sales
+
+    def _get_product_names_by_id(self) -> dict[int, str]:
+        if self._product_names_by_id is not None:
+            return self._product_names_by_id
+
+        names: dict[int, str] = {}
+        for item in self._get_paginated("/products/list"):
+            product_id = int(item.get("id") or 0)
+            if product_id <= 0:
+                continue
+            names[product_id] = str(item.get("name") or "")
+        self._product_names_by_id = names
+        return names
 
     def get_transactions(
         self,
@@ -227,3 +248,35 @@ def _parse_datetime(value: Any) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def sale_counts_as_bar(sale: ProductSale) -> bool:
+    if sale.cancel != 0:
+        return False
+    lowered = sale.product_name.lower()
+    for keyword in _non_bar_keywords():
+        if keyword in lowered:
+            return False
+    return True
+
+
+_NON_BAR_KEYWORDS_CACHE: tuple[str, ...] | None = None
+
+
+def _non_bar_keywords() -> tuple[str, ...]:
+    global _NON_BAR_KEYWORDS_CACHE
+    if _NON_BAR_KEYWORDS_CACHE is not None:
+        return _NON_BAR_KEYWORDS_CACHE
+
+    path = Path(__file__).with_name("non_bar_keywords.txt")
+    keywords: list[str] = []
+    try:
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            text = raw.strip().lower()
+            if text and not text.startswith("#"):
+                keywords.append(text)
+    except FileNotFoundError:
+        keywords = ["закупка для сотрудников"]
+
+    _NON_BAR_KEYWORDS_CACHE = tuple(keywords)
+    return _NON_BAR_KEYWORDS_CACHE

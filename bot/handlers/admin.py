@@ -257,8 +257,10 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     synced, sync_error, _ = sync_admin_shifts(api, storage, settings, storage.get_link(telegram_id))
 
+    keyboard = build_main_keyboard(telegram_id, settings, storage)
     await reply_message(update.message,
         langame_linked(name, matched.id, synced=synced, sync_error=sync_error),
+        reply_markup=keyboard,
     )
 
 

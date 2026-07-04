@@ -6,7 +6,7 @@ from telegram import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from bot.config import Settings
 from bot.emojis import FALLBACK, icon_id
-from bot.roles import can_use_bot, has_manager_access, is_developer
+from bot.roles import can_use_bot, has_manager_access, is_developer, needs_langame_link
 from bot.storage import Storage
 
 BTN_HOME = "Меню"
@@ -157,8 +157,9 @@ def build_main_keyboard(
     rows = [
         [_btn(BTN_SALARY, "money_bag"), _btn(BTN_HALF_MONTH, "date")],
         [_btn(BTN_MY_FINES, "warning"), _btn(BTN_PROFILE, "person")],
-        [_btn(BTN_LINK, "link")],
     ]
+    if needs_langame_link(settings, storage, telegram_id):
+        rows.append([_btn(BTN_LINK, "link")])
 
     if manager:
         manager_rows = [

@@ -5,10 +5,19 @@ from bot.salary import format_money
 from bot.services import format_percent
 
 
-def bar_bonus_added(amount: float, bar_bonus_percent: float) -> str:
+def bar_bonus_added(
+    amount: float,
+    bar_bonus_percent: float,
+    sale_amount: float,
+    product_name: str,
+    product_count: int,
+) -> str:
+    item_name = product_name.strip() or "Товар без названия"
     return (
         f"{e('money_bag')} Вам добавлено {h(format_money(amount))}! "
-        f"({h(format_percent(bar_bonus_percent))}% от бара) {e('burger')}"
+        f"({h(format_percent(bar_bonus_percent))}% от бара) {e('burger')}\n"
+        f"{e('memo')} Товар: {h(item_name)} ×{h(product_count)}\n"
+        f"{e('burger')} Продано из бара: {h(format_money(sale_amount))}"
     )
 
 

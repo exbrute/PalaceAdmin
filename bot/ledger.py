@@ -5,7 +5,7 @@ from datetime import date, datetime
 
 from bot.emojis import e
 from bot.config import Settings
-from bot.langame_api import LangameApiError, LangameClient, ProductSale, WorkingShift
+from bot.langame_api import LangameApiError, LangameClient, ProductSale, WorkingShift, sale_counts_as_bar
 from bot.salary import (
     filter_shifts_for_user,
     format_money,
@@ -39,6 +39,14 @@ class BotPeriodSummary:
     net_amount: float
 
 
+def shift_eligible_for_earnings(shift: WorkingShift, settings: Settings) -> bool:
+    if settings.earnings_start_date is None:
+        return True
+    if not shift.date_start:
+        return False
+    return shift.date_start.date() >= settings.earnings_start_date
+
+
 def calculate_shift_stats(
     shift: WorkingShift,
     sales: list[ProductSale],
@@ -48,12 +56,12 @@ def calculate_shift_stats(
     shift_sales = [
         sale
         for sale in sales
-        if sale.working_shift_id == shift.id and sale.cancel == 0
+        if sale.working_shift_id == shift.id and sale_counts_as_bar(sale)
     ]
     bar_total = sum(sale.price_sale * sale.count for sale in shift_sales)
     bar_bonus = bar_total * get_bar_bonus_percent(storage, settings) / 100
     fixed = settings.fixed_salary
-    gross = fixed
+    gross = fixed + bar_bonus
     return bar_total, bar_bonus, fixed, gross, len(shift_sales)
 
 
@@ -76,6 +84,8 @@ def sync_admin_shifts(
     synced_shift_ids: list[int] = []
 
     for shift in user_shifts:
+        if not shift_eligible_for_earnings(shift, settings):
+            continue
         if storage.has_shift_earning(shift.id):
             continue
 
@@ -131,6 +141,8 @@ def sync_shift_by_id(
         return None, f"{e('prohibited')} Эта смена принадлежит другому администратору", None
     if shift.date_stop is None:
         return None, f"{e('refresh')} Смена ещё не закрыта — фикс начислится после закрытия", None
+    if not shift_eligible_for_earnings(shift, settings):
+        return None, f"{e('cancel')} Смена до {settings.earnings_start_date.strftime('%d.%m.%Y')} не учитывается", None
 
     date_from, date_to = shift_date_range(shift)
     try:
@@ -174,7 +186,7 @@ def sync_all_admins(
 
 def get_admin_balance(storage: Storage, telegram_id: int) -> AdminBalance:
     shift_earned = storage.sum_shift_earnings(telegram_id)
-    bar_instant = storage.sum_bar_sale_credits(telegram_id)
+    bar_instant = storage.sum_unsettled_bar_sale_credits(telegram_id)
     fines = storage.sum_fines(telegram_id)
     settled = storage.sum_settlements(telegram_id)
     count = storage.count_shift_earnings(telegram_id)
@@ -201,7 +213,7 @@ def get_period_summary(
     shift_gross = sum(item.gross_amount for item in earnings)
     bar_sales = sum(item.bar_sales for item in earnings)
     bar_bonus_shift = sum(item.bar_bonus for item in earnings)
-    bar_instant = storage.sum_bar_sale_credits(telegram_id, date_from, date_to)
+    bar_instant = storage.sum_unsettled_bar_sale_credits(telegram_id, date_from, date_to)
     fixed = sum(item.fixed_salary for item in earnings)
     fines = storage.sum_fines_between(telegram_id, date_from, date_to)
     gross = shift_gross + bar_instant
@@ -235,15 +247,14 @@ def format_earning_line(
         stop = datetime.fromisoformat(earning.shift_stop).strftime("%d.%m.%Y %H:%M")
 
     fines = storage.sum_fines(earning.telegram_id, earning.shift_id)
-    bar_instant = storage.sum_bar_sale_credits_for_shift(earning.telegram_id, earning.shift_id)
-    net = earning.gross_amount + bar_instant - fines
+    net = earning.gross_amount - fines
     bar_percent = format_percent(get_bar_bonus_percent(storage, settings))
 
     lines = [
         f"{e('gear')} Смена #{earning.shift_id}",
         f"{e('date')} Период: {start} — {stop}",
         f"{e('burger')} Продажи бара: {format_money(earning.bar_sales)} ({earning.sales_count} поз.)",
-        f"{e('money')} {bar_percent}% с бара: {format_money(bar_instant or earning.bar_bonus)} — начисляется сразу",
+        f"{e('money')} {bar_percent}% с бара: {format_money(earning.bar_bonus)} — начисляется сразу",
         f"{e('check')} Фикс за смену: {format_money(earning.fixed_salary)}",
     ]
     if fines:
@@ -281,9 +292,6 @@ def format_open_shift_line(
     bar_total, bar_bonus, fixed, _, sales_count = calculate_shift_stats(
         shift, sales, settings, storage
     )
-    bar_instant = storage.sum_bar_sale_credits_for_shift(link.telegram_id, shift.id)
-    if bar_instant > 0:
-        bar_bonus = bar_instant
     fines = storage.sum_fines(link.telegram_id, shift.id)
     bar_percent = format_percent(get_bar_bonus_percent(storage, settings))
 

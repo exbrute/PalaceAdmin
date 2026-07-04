@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,6 +21,14 @@ class Settings:
     manager_telegram_ids: frozenset[int]
     developer_telegram_ids: frozenset[int]
     settlement_timezone: str
+    earnings_start_date: date | None
+
+
+def _parse_date(raw: str) -> date | None:
+    text = raw.strip()
+    if not text:
+        return None
+    return date.fromisoformat(text)
 
 
 def _parse_id_set(raw: str) -> frozenset[int]:
@@ -47,4 +56,5 @@ def get_settings() -> Settings:
         manager_telegram_ids=_parse_id_set(os.getenv("MANAGER_TELEGRAM_IDS", "")),
         developer_telegram_ids=_parse_id_set(os.getenv("DEVELOPER_TELEGRAM_IDS", "")),
         settlement_timezone=os.getenv("SETTLEMENT_TIMEZONE", "Europe/Moscow").strip(),
+        earnings_start_date=_parse_date(os.getenv("EARNINGS_START_DATE", "")),
     )

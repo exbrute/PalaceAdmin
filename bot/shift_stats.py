@@ -51,9 +51,7 @@ def build_shift_close_report(
 
     if earning is not None:
         bar_revenue = earning.bar_sales
-        bar_bonus = storage.sum_bar_sale_credits_for_shift(link.telegram_id, shift.id)
-        if bar_bonus < 0.01:
-            bar_bonus = earning.bar_bonus
+        bar_bonus = earning.bar_bonus
         fixed = earning.fixed_salary
     else:
         date_from, date_to = shift_date_range(shift)
@@ -64,9 +62,6 @@ def build_shift_close_report(
             except LangameApiError:
                 sales = []
         bar_revenue, bar_bonus, fixed, _, _ = calculate_shift_stats(shift, sales, settings, storage)
-        instant = storage.sum_bar_sale_credits_for_shift(link.telegram_id, shift.id)
-        if instant > 0:
-            bar_bonus = instant
 
     fines = storage.sum_fines(link.telegram_id, shift.id)
     net_salary = fixed + bar_bonus - fines

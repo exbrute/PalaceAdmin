@@ -1,0 +1,8 @@
+# Any line here excludes product from "bar" calculations.
+# Matching is case-insensitive substring by product name.
+
+закупка для сотрудников
+закуп
+Аренда
+PS5
+сбор

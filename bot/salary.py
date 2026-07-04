@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 
 from bot.config import Settings
-from bot.langame_api import AdminUser, LangameClient, ProductSale, WorkingShift
+from bot.langame_api import AdminUser, LangameClient, ProductSale, WorkingShift, sale_counts_as_bar
 from bot.services import get_bar_bonus_percent
 from bot.storage import Storage
 
@@ -46,7 +46,7 @@ def calculate_shift_salary(
     shift_sales = [
         sale
         for sale in sales
-        if sale.working_shift_id == shift.id and sale.cancel == 0
+        if sale.working_shift_id == shift.id and sale_counts_as_bar(sale)
     ]
     bar_total = sum(sale.price_sale * sale.count for sale in shift_sales)
     percent = (

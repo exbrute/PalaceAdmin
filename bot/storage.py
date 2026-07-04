@@ -614,6 +614,52 @@ class Storage:
         ).fetchone()
         return float(row["total"])
 
+    def purge_earnings_before(self, cutoff: date) -> tuple[int, int, int]:
+        rows = self._conn.execute(
+            """
+            SELECT shift_id FROM shift_earnings
+            WHERE shift_start IS NOT NULL
+              AND date(substr(shift_start, 1, 10)) < date(?)
+            """,
+            (cutoff.isoformat(),),
+        ).fetchall()
+        shift_ids = [int(row["shift_id"]) for row in rows]
+
+        bar_deleted = 0
+        notif_deleted = 0
+        if shift_ids:
+            placeholders = ",".join("?" * len(shift_ids))
+            bar_deleted = self._conn.execute(
+                f"DELETE FROM bar_sale_credits WHERE shift_id IN ({placeholders})",
+                shift_ids,
+            ).rowcount
+            notif_deleted = self._conn.execute(
+                f"DELETE FROM shift_notifications WHERE shift_id IN ({placeholders})",
+                shift_ids,
+            ).rowcount
+
+        earnings_deleted = self._conn.execute(
+            """
+            DELETE FROM shift_earnings
+            WHERE shift_start IS NOT NULL
+              AND date(substr(shift_start, 1, 10)) < date(?)
+            """,
+            (cutoff.isoformat(),),
+        ).rowcount
+        self._conn.commit()
+        return earnings_deleted, bar_deleted, notif_deleted
+
+    def purge_bar_credits_for_shifts(self, shift_ids: list[int]) -> int:
+        if not shift_ids:
+            return 0
+        placeholders = ",".join("?" * len(shift_ids))
+        deleted = self._conn.execute(
+            f"DELETE FROM bar_sale_credits WHERE shift_id IN ({placeholders})",
+            shift_ids,
+        ).rowcount
+        self._conn.commit()
+        return deleted
+
     def has_bar_sale_credit(self, sale_id: int) -> bool:
         row = self._conn.execute(
             "SELECT 1 FROM bar_sale_credits WHERE sale_id = ?",
@@ -661,6 +707,31 @@ class Storage:
             params.append(date_from.isoformat())
         if date_to is not None:
             query += " AND date(substr(credited_at, 1, 10)) <= date(?)"
+            params.append(date_to.isoformat())
+        row = self._conn.execute(query, params).fetchone()
+        return float(row["total"])
+
+    def sum_unsettled_bar_sale_credits(
+        self,
+        telegram_id: int,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> float:
+        query = """
+            SELECT COALESCE(SUM(c.bonus_amount), 0) AS total
+            FROM bar_sale_credits c
+            LEFT JOIN shift_earnings e
+              ON e.shift_id = c.shift_id
+             AND e.telegram_id = c.telegram_id
+            WHERE c.telegram_id = ?
+              AND e.shift_id IS NULL
+        """
+        params: list[object] = [telegram_id]
+        if date_from is not None:
+            query += " AND date(substr(c.credited_at, 1, 10)) >= date(?)"
+            params.append(date_from.isoformat())
+        if date_to is not None:
+            query += " AND date(substr(c.credited_at, 1, 10)) <= date(?)"
             params.append(date_to.isoformat())
         row = self._conn.execute(query, params).fetchone()
         return float(row["total"])
