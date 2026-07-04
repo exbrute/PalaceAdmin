@@ -63,6 +63,31 @@ def _transaction_is_beznal(item: dict[str, Any]) -> bool:
     return _float(item.get("Beznal")) > 0 or _float(item.get("mobile")) > 0
 
 
+def _transaction_counts_in_revenue_beznal(item: dict[str, Any]) -> bool:
+    """Admin PC beznal: admin card, Yandex Pay, mobile app, terminal card."""
+    if _float(item.get("Beznal")) <= 0:
+        return False
+    admin = str(item.get("admin") or "") == "1"
+    soft = str(item.get("soft") or "") == "1"
+    mobile = _float(item.get("mobile")) > 0
+    p1c = _float(item.get("payment_1C")) > 0
+    if admin and soft:
+        return False
+    if admin and not soft:
+        return True
+    if soft and not admin and p1c:
+        return True
+    if mobile and not admin and p1c:
+        return True
+    if not admin and not soft and not mobile and p1c:
+        return True
+    return False
+
+
+def _transaction_counts_in_revenue_nal(item: dict[str, Any]) -> bool:
+    return _float(item.get("Beznal")) <= 0
+
+
 def _live_shift_nal_beznal(
     client: LangameClient,
     shift: WorkingShift,
@@ -83,10 +108,9 @@ def _live_shift_nal_beznal(
             continue
         if transaction.balance <= 0:
             continue
-        if transaction.is_beznal:
-            if transaction.is_admin and not transaction.is_soft:
-                tx_beznal += transaction.balance
-        else:
+        if transaction.counts_in_revenue_beznal:
+            tx_beznal += transaction.balance
+        elif transaction.counts_in_revenue_nal:
             tx_nal += transaction.balance
 
     prod_nal = 0.0
@@ -95,8 +119,7 @@ def _live_shift_nal_beznal(
         if sale.working_shift_id != shift.id or sale.cancel != 0:
             continue
         if sale.is_beznal:
-            if not sale.from_magazine and sale.payment_1c:
-                prod_beznal += sale.amount
+            prod_beznal += sale.amount
         else:
             prod_nal += sale.amount
 
@@ -160,6 +183,8 @@ class MoneyTransaction:
     is_beznal: bool = False
     is_admin: bool = False
     is_soft: bool = False
+    counts_in_revenue_beznal: bool = False
+    counts_in_revenue_nal: bool = False
 
 
 class LangameClient:
@@ -330,6 +355,8 @@ class LangameClient:
                     is_beznal=_transaction_is_beznal(item),
                     is_admin=str(item.get("admin") or "") == "1",
                     is_soft=str(item.get("soft") or "") == "1",
+                    counts_in_revenue_beznal=_transaction_counts_in_revenue_beznal(item),
+                    counts_in_revenue_nal=_transaction_counts_in_revenue_nal(item),
                 )
             )
         return transactions

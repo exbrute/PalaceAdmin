@@ -89,14 +89,8 @@ def welcome_guest() -> str:
     return f"{e('wave')} Добро пожаловать в Palace Adms!"
 
 
-def help_header(*, bar_bonus_percent: float, fixed_salary: float) -> str:
-    pct = format_percent(bar_bonus_percent)
-    return (
-        f"{e('book')} Palace Adms — зарплата администраторов\n"
-        f"{e('money')} {h(format_money(fixed_salary))} за клубную смену (12 ч) + {e('burger')} {h(pct)}% от бара\n"
-        f"   работа по часам, уборка {h(format_money(500))} — первому админу\n"
-        f"{e('date')} Выплаты: 16-го (1–15) и 1-го (16–конец месяца)"
-    )
+def help_header() -> str:
+    return f"{e('book')} Palace Adms — зарплата администраторов"
 
 
 def help_admin_section() -> list[str]:
@@ -105,7 +99,6 @@ def help_admin_section() -> list[str]:
         f"{e('person')} Администратор:",
         f"• {e('money_bag')} Текущая смена — открытая или последняя закрытая",
         f"• {e('date')} За полмесяца — с 1 по 15 или с 16 по конец месяца",
-        f"• {e('warning')} Мои штрафы",
     ]
 
 
@@ -316,8 +309,11 @@ def manager_shift_closed(
     stopped_at: str,
     cash_in_register: float,
     total_revenue: float,
+    nal_revenue: float,
+    beznal_revenue: float,
     club_revenue: float,
     bar_revenue: float,
+    bar_share_percent: float,
     net_salary: float,
     fixed: float,
     bar_bonus: float,
@@ -325,6 +321,7 @@ def manager_shift_closed(
     bar_bonus_percent: float,
 ) -> str:
     pct = format_percent(bar_bonus_percent)
+    bar_share = format_percent(bar_share_percent)
     lines = [
         f"{e('red')} Смена закрыта",
         "",
@@ -333,9 +330,12 @@ def manager_shift_closed(
         f"{e('date')} Конец: {h(stopped_at)}",
         "",
         f"{e('money')} В кассе: {h(format_money(cash_in_register))}",
-        f"{e('chart_up')} Общая выручка за смену: {h(format_money(total_revenue))}",
-        f"{e('phone')} Сессии и услуги: {h(format_money(club_revenue))}",
+        f"{e('chart_up')} Общая выручка: {h(format_money(total_revenue))}",
+        f"{e('money')} Нал: {h(format_money(nal_revenue))}",
+        f"{e('card')} Безнал: {h(format_money(beznal_revenue))}",
+        f"{e('phone')} Компы (сессии): {h(format_money(club_revenue))}",
         f"{e('burger')} Бар: {h(format_money(bar_revenue))}",
+        f"{e('chart')} Бар от выручки: {h(bar_share)}%",
         "",
         f"{e('money_bag')} ЗП админа за смену: {h(format_money(net_salary))}",
         f"   {e('check')} фикс: {h(format_money(fixed))}",
@@ -343,4 +343,6 @@ def manager_shift_closed(
     ]
     if fines > 0:
         lines.append(f"   {e('warning')} штрафы: −{h(format_money(fines))}")
+    lines.append("")
+    lines.append(f"{e('newspaper')} Детализация по товарам — в CSV-файле ниже")
     return "\n".join(lines)

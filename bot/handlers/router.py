@@ -182,12 +182,8 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     staff_access = has_manager_access(settings, storage, update.effective_user.id)
     developer_access = is_developer(settings, update.effective_user.id)
 
-    bar_percent = get_bar_bonus_percent(storage, settings)
     lines = [
-        help_header(
-            bar_bonus_percent=bar_percent,
-            fixed_salary=settings.fixed_salary,
-        ),
+        help_header(),
     ]
     if staff_access:
         lines.extend(help_manager_section())
