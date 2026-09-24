@@ -122,10 +122,6 @@ class Storage:
         )
         self._ensure_column("admin_links", "role", "TEXT NOT NULL DEFAULT 'admin'")
         self._ensure_column("fines", "telegram_id", "INTEGER")
-        self._ensure_column("shift_earnings", "worked_hours", "REAL NOT NULL DEFAULT 0")
-        self._ensure_column("shift_earnings", "fixed_work", "REAL NOT NULL DEFAULT 0")
-        self._ensure_column("shift_earnings", "fixed_cleaning", "REAL NOT NULL DEFAULT 0")
-        self._ensure_column("shift_earnings", "club_shift_key", "TEXT")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS shift_earnings (
@@ -143,6 +139,10 @@ class Storage:
             )
             """
         )
+        self._ensure_column("shift_earnings", "worked_hours", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "fixed_work", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "fixed_cleaning", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "club_shift_key", "TEXT")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS balance_settlements (
@@ -214,6 +214,8 @@ class Storage:
             row["name"]
             for row in self._conn.execute(f"PRAGMA table_info({table})").fetchall()
         }
+        if not columns:
+            return
         if column not in columns:
             self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
