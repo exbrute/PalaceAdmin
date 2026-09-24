@@ -37,7 +37,6 @@ ADMIN_BUTTONS = {
     BTN_HALF_MONTH,
     BTN_MY_FINES,
     BTN_PROFILE,
-    BTN_LINK,
     BTN_HELP,
     BTN_HOME,
     BTN_CANCEL,
@@ -70,6 +69,7 @@ STATE_BROADCAST = "broadcast"
 STATE_BAR_PERCENT = "bar_percent"
 STATE_ADD_ADMIN_NAME = "add_admin_name"
 STATE_ADD_ADMIN_TG = "add_admin_tg"
+STATE_ADD_ADMIN_LANGAME = "add_admin_langame"
 STATE_ADD_MANAGER_NAME = "add_manager_name"
 STATE_ADD_MANAGER_TG = "add_manager_tg"
 STATE_REMOVE_FINE_ID = "remove_fine_id"
@@ -160,7 +160,7 @@ def build_main_keyboard(
             [_btn(BTN_SALARY, "money_bag"), _btn(BTN_HALF_MONTH, "date")],
             [_btn(BTN_MY_FINES, "warning"), _btn(BTN_PROFILE, "person")],
         ]
-    if needs_langame_link(settings, storage, telegram_id):
+    if manager and needs_langame_link(settings, storage, telegram_id):
         rows.append([_btn(BTN_LINK, "link")])
 
     if manager:

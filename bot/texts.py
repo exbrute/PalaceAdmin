@@ -81,7 +81,10 @@ def welcome_admin(*, langame_linked: bool, bar_bonus_percent: float, fixed_salar
         f"{e('phone')} Выберите действие в меню."
     )
     if not langame_linked:
-        text += f"\n\n{e('link')} Привяжите LANGAME — кнопка «Привязать аккаунт»."
+        text += (
+            f"\n\n{e('link')} LANGAME ещё не привязан. "
+            "Попросите управляющего указать ваш LANGAME id."
+        )
     return text
 
 
@@ -107,7 +110,7 @@ def help_manager_section() -> list[str]:
         "",
         f"{e('person')} Управляющий:",
         f"• {e('money_bag')} Текущая смена — кто из админов на смене, бар от выручки",
-        f"• {e('plus')} Добавить / {e('trash')} убрать админа",
+        f"• {e('plus')} Добавить (имя, Telegram ID, LANGAME id) / {e('trash')} убрать админа",
         f"• {e('people')} Команда, {e('chart')} ведомость, {e('newspaper')} экспорт CSV",
         f"• {e('chart_up')} рейтинг бара",
         f"• {e('warning')} Штраф / {e('trash')} убрать штраф",
@@ -150,11 +153,24 @@ def not_registered() -> str:
 
 
 def link_langame_first() -> str:
-    return f"{e('link')} Сначала привяжите LANGAME — кнопка «Привязать аккаунт»."
+    return (
+        f"{e('link')} LANGAME не привязан. "
+        "Попросите управляющего указать LANGAME id при добавлении."
+    )
 
 
 def link_langame_for_salary() -> str:
-    return f"{e('link')} Для расчёта зарплаты привяжите LANGAME — кнопка «Привязать аккаунт»."
+    return (
+        f"{e('link')} Для расчёта зарплаты нужен LANGAME id. "
+        "Попросите управляющего привязать его при добавлении в бот."
+    )
+
+
+def admin_cannot_link_langame() -> str:
+    return (
+        f"{e('lock')} Привязать LANGAME может только управляющий — "
+        "при добавлении админа."
+    )
 
 
 def no_shifts_yet() -> str:
@@ -213,12 +229,15 @@ def fine_cancelled_notify(fine_id: int, amount: float, reason: str) -> str:
     )
 
 
-def admin_added(name: str, telegram_id: int) -> str:
-    return (
-        f"{e('check')} Администратор добавлен:\n"
-        f"{e('person')} {h(name)}\n"
-        f"{e('info')} Telegram ID: {h(telegram_id)}"
-    )
+def admin_added(name: str, telegram_id: int, *, langame_id: int | None = None) -> str:
+    lines = [
+        f"{e('check')} Администратор добавлен:",
+        f"{e('person')} {h(name)}",
+        f"{e('info')} Telegram ID: {h(telegram_id)}",
+    ]
+    if langame_id:
+        lines.append(f"{e('link')} LANGAME id: {h(langame_id)}")
+    return "\n".join(lines)
 
 
 def admin_added_notify(name: str) -> str:

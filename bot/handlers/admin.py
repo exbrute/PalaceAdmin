@@ -206,7 +206,7 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     balance = get_admin_balance(storage, telegram_id)
     name = link.username or "—"
-    langame = "привязан" if link.user_id else "не привязан — нажмите «Привязать аккаунт»"
+    langame = f"привязан (id: {link.user_id})" if link.user_id else "не привязан — обратитесь к управляющему"
     await _reply(
         update,
         context,
@@ -226,14 +226,14 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     storage: Storage = context.application.bot_data["storage"]
     telegram_id = update.effective_user.id
 
+    if not await require_manager(update, context):
+        return
+
     if not context.args:
         await reply_message(update.message,"Укажите email: /link admin@example.com")
         return
 
     existing = storage.get_link(telegram_id)
-    if not existing and not has_manager_access(settings, storage, telegram_id):
-        await reply_message(update.message,"Вы не зарегистрированы. Обратитесь к управляющему.")
-        return
 
     query = context.args[0].strip().lower()
     try:
