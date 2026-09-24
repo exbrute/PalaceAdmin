@@ -210,7 +210,7 @@ def sync_admin_shifts(
     link: UserLink,
 ) -> tuple[int, str | None, list[int]]:
     if link.user_id == 0:
-        return 0, f"{e('link')} Привяжите LANGAME — кнопка «Привязать аккаунт». Без этого бот не узнает ваши смены.", []
+        return 0, f"{e('link')} LANGAME не привязан. Попросите управляющего указать LANGAME id.", []
 
     try:
         all_shifts = api.get_working_shifts()
@@ -253,7 +253,7 @@ def sync_shift_by_id(
     shift_id: int,
 ) -> tuple[ShiftEarning | None, str | None, float | None]:
     if link.user_id == 0:
-        return None, f"{e('link')} Привяжите LANGAME для синхронизации смен", None
+        return None, f"{e('link')} LANGAME не привязан. Попросите управляющего указать LANGAME id.", None
 
     try:
         all_shifts = api.get_working_shifts()
