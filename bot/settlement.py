@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from telegram.ext import ContextTypes
 
 from bot.messaging import send as send_message
+from bot.config import Settings
 from bot.ledger import get_admin_balance
 from bot.pay_period import is_settlement_day
 from bot.storage import ROLE_ADMIN, Storage
@@ -21,6 +22,7 @@ SETTLEMENT_MINUTE = 30
 def settle_admin_balance(
     storage: Storage,
     telegram_id: int,
+    settings: Settings,
     *,
     cycle_key: str,
     settled_at: str,
@@ -28,7 +30,7 @@ def settle_admin_balance(
     if storage.has_balance_settlement(telegram_id, cycle_key):
         return None
 
-    balance = get_admin_balance(storage, telegram_id).balance
+    balance = get_admin_balance(storage, telegram_id, settings).balance
     if balance == 0:
         return None
 
@@ -45,6 +47,7 @@ def settle_admin_balance(
 
 def settle_all_admin_balances(
     storage: Storage,
+    settings: Settings,
     *,
     cycle_key: str,
     settled_at: str,
@@ -54,6 +57,7 @@ def settle_all_admin_balances(
         amount = settle_admin_balance(
             storage,
             link.telegram_id,
+            settings,
             cycle_key=cycle_key,
             settled_at=settled_at,
         )
@@ -77,6 +81,7 @@ async def run_scheduled_settlement(context: ContextTypes.DEFAULT_TYPE) -> None:
     settled_at = now.isoformat(timespec="seconds")
     results = settle_all_admin_balances(
         storage,
+        settings,
         cycle_key=cycle_key,
         settled_at=settled_at,
     )

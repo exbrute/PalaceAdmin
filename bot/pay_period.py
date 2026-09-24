@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import calendar
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from bot.emojis import e
@@ -78,6 +78,20 @@ def _period_for_second_half(year: int, month: int, *, date_to: int | None = None
         half_label=half_label,
         cycle_key=f"{year}-{month:02d}-h2",
     )
+
+
+def unpaid_pay_period(today: date, *, settled: bool = False) -> PayPeriod:
+    """Period that still counts toward the live balance.
+
+    On the 1st/16th, keep the just-finished half-month until settlement runs.
+    After that (or on other days) use the current half-month.
+    """
+    if is_settlement_day(today) and not settled:
+        if today.day == 1:
+            previous = today - timedelta(days=1)
+            return _period_for_second_half(previous.year, previous.month)
+        return _period_for_first_half(today.year, today.month)
+    return current_pay_period(today)
 
 
 def current_pay_period(today: date) -> PayPeriod:

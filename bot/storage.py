@@ -122,10 +122,6 @@ class Storage:
         )
         self._ensure_column("admin_links", "role", "TEXT NOT NULL DEFAULT 'admin'")
         self._ensure_column("fines", "telegram_id", "INTEGER")
-        self._ensure_column("shift_earnings", "worked_hours", "REAL NOT NULL DEFAULT 0")
-        self._ensure_column("shift_earnings", "fixed_work", "REAL NOT NULL DEFAULT 0")
-        self._ensure_column("shift_earnings", "fixed_cleaning", "REAL NOT NULL DEFAULT 0")
-        self._ensure_column("shift_earnings", "club_shift_key", "TEXT")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS shift_earnings (
@@ -143,6 +139,10 @@ class Storage:
             )
             """
         )
+        self._ensure_column("shift_earnings", "worked_hours", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "fixed_work", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "fixed_cleaning", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "club_shift_key", "TEXT")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS balance_settlements (
@@ -214,6 +214,8 @@ class Storage:
             row["name"]
             for row in self._conn.execute(f"PRAGMA table_info({table})").fetchall()
         }
+        if not columns:
+            return
         if column not in columns:
             self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
@@ -249,11 +251,18 @@ class Storage:
 
         return None
 
-    def register_admin(self, telegram_id: int, username: str) -> None:
+    def register_admin(
+        self,
+        telegram_id: int,
+        username: str,
+        *,
+        user_id: int = 0,
+        email: str | None = None,
+    ) -> None:
         self.link_admin(
             telegram_id=telegram_id,
-            user_id=0,
-            email=f"pending_{telegram_id}@local",
+            user_id=user_id,
+            email=email or f"pending_{telegram_id}@local",
             username=username.strip(),
             role=ROLE_ADMIN,
         )
@@ -645,11 +654,21 @@ class Storage:
         rows = self._conn.execute(query, params).fetchall()
         return [self._row_to_shift_earning(row) for row in rows]
 
-    def count_shift_earnings(self, telegram_id: int) -> int:
-        row = self._conn.execute(
-            "SELECT COUNT(*) AS total FROM shift_earnings WHERE telegram_id = ?",
-            (telegram_id,),
-        ).fetchone()
+    def count_shift_earnings(
+        self,
+        telegram_id: int,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> int:
+        query = "SELECT COUNT(*) AS total FROM shift_earnings WHERE telegram_id = ?"
+        params: list[object] = [telegram_id]
+        if date_from is not None:
+            query += " AND date(substr(shift_start, 1, 10)) >= date(?)"
+            params.append(date_from.isoformat())
+        if date_to is not None:
+            query += " AND date(substr(shift_start, 1, 10)) <= date(?)"
+            params.append(date_to.isoformat())
+        row = self._conn.execute(query, params).fetchone()
         return int(row["total"])
 
     def sum_shift_earnings(

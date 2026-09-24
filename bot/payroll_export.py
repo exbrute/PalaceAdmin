@@ -47,7 +47,7 @@ def build_payroll_csv(
         summary = get_period_summary(
             storage, link.telegram_id, period.date_from, period.date_to
         )
-        balance = get_admin_balance(storage, link.telegram_id)
+        balance = get_admin_balance(storage, link.telegram_id, settings)
         name = Storage.admin_name(link)
         rows.append((
             name,

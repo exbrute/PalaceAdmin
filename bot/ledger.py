@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from bot.emojis import e
 from bot.config import Settings
+from bot.pay_period import today_in_timezone, unpaid_pay_period
 from bot.langame_api import LangameApiError, LangameClient, ProductSale, WorkingShift, resolve_shift_nal_beznal, sale_counts_as_bar
 from bot.salary import (
     filter_shifts_for_user,
@@ -45,12 +47,18 @@ class BotPeriodSummary:
     net_amount: float
 
 
+def earnings_cutoff_date(settings: Settings, today: date | None = None) -> date:
+    day = today or today_in_timezone(settings.settlement_timezone)
+    cutoff = unpaid_pay_period(day, settled=False).date_from
+    if settings.earnings_start_date is not None and settings.earnings_start_date > cutoff:
+        return settings.earnings_start_date
+    return cutoff
+
+
 def shift_eligible_for_earnings(shift: WorkingShift, settings: Settings) -> bool:
-    if settings.earnings_start_date is None:
-        return True
     if not shift.date_start:
         return False
-    return shift.date_start.date() >= settings.earnings_start_date
+    return shift.date_start.date() >= earnings_cutoff_date(settings)
 
 
 def calculate_shift_bar_stats(
@@ -210,7 +218,7 @@ def sync_admin_shifts(
     link: UserLink,
 ) -> tuple[int, str | None, list[int]]:
     if link.user_id == 0:
-        return 0, f"{e('link')} Привяжите LANGAME — кнопка «Привязать аккаунт». Без этого бот не узнает ваши смены.", []
+        return 0, f"{e('link')} LANGAME не привязан. Попросите управляющего указать LANGAME id.", []
 
     try:
         all_shifts = api.get_working_shifts()
@@ -253,7 +261,7 @@ def sync_shift_by_id(
     shift_id: int,
 ) -> tuple[ShiftEarning | None, str | None, float | None]:
     if link.user_id == 0:
-        return None, f"{e('link')} Привяжите LANGAME для синхронизации смен", None
+        return None, f"{e('link')} LANGAME не привязан. Попросите управляющего указать LANGAME id.", None
 
     try:
         all_shifts = api.get_working_shifts()
@@ -268,7 +276,8 @@ def sync_shift_by_id(
     if shift.date_stop is None:
         return None, f"{e('refresh')} Смена ещё не закрыта — фикс начислится после закрытия", None
     if not shift_eligible_for_earnings(shift, settings):
-        return None, f"{e('cancel')} Смена до {settings.earnings_start_date.strftime('%d.%m.%Y')} не учитывается", None
+        cutoff = earnings_cutoff_date(settings)
+        return None, f"{e('cancel')} Смена до {cutoff.strftime('%d.%m.%Y')} не учитывается — считаем только текущий полмесяц", None
 
     club_key = club_shift_key(shift, settings)
     if club_key is None:
@@ -299,12 +308,23 @@ def sync_all_admins(
     return total, None
 
 
-def get_admin_balance(storage: Storage, telegram_id: int) -> AdminBalance:
-    shift_earned = storage.sum_shift_earnings(telegram_id)
-    bar_instant = storage.sum_unsettled_bar_sale_credits(telegram_id)
-    fines = storage.sum_fines(telegram_id)
-    settled = storage.sum_settlements(telegram_id)
-    count = storage.count_shift_earnings(telegram_id)
+def get_admin_balance(
+    storage: Storage,
+    telegram_id: int,
+    settings: Settings,
+) -> AdminBalance:
+    today = today_in_timezone(settings.settlement_timezone)
+    cycle_key = datetime.now(ZoneInfo(settings.settlement_timezone)).strftime("%Y-%m-%d")
+    settled_today = storage.has_balance_settlement(telegram_id, cycle_key)
+    period = unpaid_pay_period(today, settled=settled_today)
+    shift_earned = storage.sum_shift_earnings(
+        telegram_id, period.date_from, period.date_to
+    )
+    bar_instant = storage.sum_unsettled_bar_sale_credits(
+        telegram_id, period.date_from, period.date_to
+    )
+    fines = storage.sum_fines_between(telegram_id, period.date_from, period.date_to)
+    count = storage.count_shift_earnings(telegram_id, period.date_from, period.date_to)
     gross = shift_earned + bar_instant
     return AdminBalance(
         telegram_id=telegram_id,
@@ -313,8 +333,8 @@ def get_admin_balance(storage: Storage, telegram_id: int) -> AdminBalance:
         bar_bonus_instant=bar_instant,
         gross_earned=gross,
         fines_total=fines,
-        settled_total=settled,
-        balance=gross - fines - settled,
+        settled_total=0.0,
+        balance=gross - fines,
     )
 
 

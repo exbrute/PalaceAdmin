@@ -28,6 +28,7 @@ from bot.keyboards import (
     BTN_SALARY,
     BTN_SHIFT_REPORT,
     BTN_TEAM,
+    STATE_ADD_ADMIN_LANGAME,
     STATE_ADD_ADMIN_NAME,
     STATE_ADD_ADMIN_TG,
     STATE_ADD_MANAGER_NAME,
@@ -63,12 +64,14 @@ from bot.roles import (
     require_developer,
     require_manager,
 )
+from bot.ledger import sync_admin_shifts
 from bot.salary import format_money, resolve_langame_user
 from bot.storage import ROLE_ADMIN, Storage
 from bot.texts import (
     action_cancelled,
     admin_added,
     admin_added_notify,
+    admin_cannot_link_langame,
     fine_cancelled,
     fine_cancelled_notify,
     fine_already_cancelled,
@@ -93,6 +96,8 @@ from bot.texts import (
 MANAGER_ONLY_STATES = {
     STATE_ADD_ADMIN_NAME,
     STATE_ADD_ADMIN_TG,
+    STATE_ADD_ADMIN_LANGAME,
+    STATE_LINK,
     STATE_FINE_ADMIN,
     STATE_FINE_AMOUNT,
     STATE_FINE_REASON,
@@ -206,10 +211,11 @@ async def _process_link(update: Update, context: ContextTypes.DEFAULT_TYPE, emai
         await deny_access(update)
         return
 
-    existing = storage.get_link(telegram_id)
-    if not existing and not has_manager_access(settings, storage, telegram_id):
-        await reply_menu(update, context, not_registered())
+    if not has_manager_access(settings, storage, telegram_id):
+        await reply_menu(update, context, admin_cannot_link_langame())
         return
+
+    existing = storage.get_link(telegram_id)
 
     try:
         users = api.get_users()
@@ -257,10 +263,12 @@ async def _process_add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     settings: Settings = context.application.bot_data["settings"]
+    api: LangameClient = context.application.bot_data["api"]
     storage: Storage = context.application.bot_data["storage"]
     draft = get_draft(context)
     name = draft.get("admin_name", "").strip()
     tg_raw = draft.get("admin_tg", "").strip()
+    langame_raw = str(draft.get("admin_langame", "")).strip()
 
     if not name:
         clear_state(context)
@@ -270,6 +278,15 @@ async def _process_add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not tg_raw.isdigit():
         clear_state(context)
         await reply_menu(update, context, "Telegram ID должен быть числом.")
+        return
+
+    if not langame_raw.isdigit():
+        await reply_text(
+            update,
+            context,
+            "LANGAME id должен быть числом:",
+            reply_markup=build_cancel_keyboard(),
+        )
         return
 
     telegram_id = int(tg_raw)
@@ -292,12 +309,59 @@ async def _process_add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
 
-    storage.register_admin(telegram_id=telegram_id, username=name)
+    try:
+        users = api.get_users()
+    except LangameApiError as exc:
+        await reply_text(
+            update,
+            context,
+            f"{e('warning')} {exc}\nВведите LANGAME id ещё раз:",
+            reply_markup=build_cancel_keyboard(),
+        )
+        return
+
+    matched = resolve_langame_user(langame_raw, users)
+    if not matched:
+        await reply_text(
+            update,
+            context,
+            "Администратор с таким LANGAME id не найден. Введите id ещё раз:",
+            reply_markup=build_cancel_keyboard(),
+        )
+        return
+
+    taken = storage.get_link_by_user_id(matched.id)
+    if taken:
+        await reply_text(
+            update,
+            context,
+            f"Этот LANGAME id уже привязан к {Storage.admin_name(taken)}. "
+            "Введите другой id:",
+            reply_markup=build_cancel_keyboard(),
+        )
+        return
+
+    storage.register_admin(
+        telegram_id=telegram_id,
+        username=name,
+        user_id=matched.id,
+        email=matched.email,
+    )
+    link = storage.get_link(telegram_id)
+    synced = 0
+    sync_error = None
+    if link:
+        synced, sync_error, _ = sync_admin_shifts(api, storage, settings, link)
+    extra = ""
+    if synced:
+        extra = f"\n{e('refresh')} Синхронизировано смен: {synced}"
+    elif sync_error:
+        extra = f"\n{e('warning')} {sync_error}"
     clear_state(context)
     await reply_menu(
         update,
         context,
-        admin_added(name, telegram_id),
+        admin_added(name, telegram_id, langame_id=matched.id) + extra,
     )
 
     try:
@@ -520,7 +584,22 @@ async def handle_state_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return True
 
     if state == STATE_ADD_ADMIN_TG:
+        if not text.isdigit():
+            await reply_text(
+                update, context, "Telegram ID должен быть числом:",
+                reply_markup=build_cancel_keyboard(),
+            )
+            return True
         draft["admin_tg"] = text
+        context.user_data["state"] = STATE_ADD_ADMIN_LANGAME
+        await reply_text(
+            update, context, "Введите LANGAME id администратора:",
+            reply_markup=build_cancel_keyboard(),
+        )
+        return True
+
+    if state == STATE_ADD_ADMIN_LANGAME:
+        draft["admin_langame"] = text
         await _process_add_admin(update, context)
         return True
 
@@ -714,6 +793,9 @@ async def _handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if text == BTN_LINK:
+        if not has_manager_access(settings, storage, update.effective_user.id):
+            await reply_menu(update, context, admin_cannot_link_langame())
+            return
         context.user_data["state"] = STATE_LINK
         get_draft(context)
         await reply_text(

@@ -109,7 +109,7 @@ async def team(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         for link in links:
             name = Storage.admin_name(link)
-            balance = get_admin_balance(storage, link.telegram_id)
+            balance = get_admin_balance(storage, link.telegram_id, settings)
             langame = f"LANGAME id: {link.user_id}" if link.user_id else "LANGAME не привязан"
             lines.append(
                 f"• {name}\n  {langame}, TG: {link.telegram_id}\n"
@@ -143,7 +143,7 @@ async def admin_card(
         return
 
     name = Storage.admin_name(link)
-    balance = get_admin_balance(storage, link.telegram_id)
+    balance = get_admin_balance(storage, link.telegram_id, settings)
     today = today_in_timezone(settings.settlement_timezone)
     period = current_pay_period(today)
 
@@ -458,7 +458,7 @@ async def payroll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         summary = get_period_summary(
             storage, link.telegram_id, period.date_from, period.date_to
         )
-        balance = get_admin_balance(storage, link.telegram_id)
+        balance = get_admin_balance(storage, link.telegram_id, settings)
         name = Storage.admin_name(link)
         rows.append((name, summary.net_amount, len(summary.earnings), balance.balance))
         total_net += summary.net_amount
