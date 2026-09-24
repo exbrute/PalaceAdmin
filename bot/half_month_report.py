@@ -11,6 +11,7 @@ from bot.storage import ROLE_ADMIN, Storage
 
 def build_half_month_report(
     storage: Storage,
+    settings: Settings,
     period: PayPeriod,
     *,
     test: bool = False,
@@ -33,7 +34,7 @@ def build_half_month_report(
         summary = get_period_summary(
             storage, link.telegram_id, period.date_from, period.date_to
         )
-        balance = get_admin_balance(storage, link.telegram_id)
+        balance = get_admin_balance(storage, link.telegram_id, settings)
         name = Storage.admin_name(link)
         rows.append((name, summary.net_amount, len(summary.earnings), balance.balance))
         total_net += summary.net_amount
@@ -62,7 +63,7 @@ def prepare_half_month_report(
     sync_error = sync_all_admins(api, storage, settings)[1]
     if sync_error:
         return None, sync_error
-    return build_half_month_report(storage, period, test=test), None
+    return build_half_month_report(storage, settings, period, test=test), None
 
 
 def build_current_half_month_test_report(

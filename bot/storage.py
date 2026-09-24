@@ -654,11 +654,21 @@ class Storage:
         rows = self._conn.execute(query, params).fetchall()
         return [self._row_to_shift_earning(row) for row in rows]
 
-    def count_shift_earnings(self, telegram_id: int) -> int:
-        row = self._conn.execute(
-            "SELECT COUNT(*) AS total FROM shift_earnings WHERE telegram_id = ?",
-            (telegram_id,),
-        ).fetchone()
+    def count_shift_earnings(
+        self,
+        telegram_id: int,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> int:
+        query = "SELECT COUNT(*) AS total FROM shift_earnings WHERE telegram_id = ?"
+        params: list[object] = [telegram_id]
+        if date_from is not None:
+            query += " AND date(substr(shift_start, 1, 10)) >= date(?)"
+            params.append(date_from.isoformat())
+        if date_to is not None:
+            query += " AND date(substr(shift_start, 1, 10)) <= date(?)"
+            params.append(date_to.isoformat())
+        row = self._conn.execute(query, params).fetchone()
         return int(row["total"])
 
     def sum_shift_earnings(

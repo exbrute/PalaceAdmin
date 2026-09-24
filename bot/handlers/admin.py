@@ -128,7 +128,7 @@ async def _reply_period_salary(
         await _reply(update, context, f"{title}: начислений за период пока нет")
         return
 
-    balance = get_admin_balance(storage, link.telegram_id)
+    balance = get_admin_balance(storage, link.telegram_id, settings)
     await _reply(
         update,
         context,
@@ -204,7 +204,7 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await reply_message(update.message,"Вы не зарегистрированы.")
         return
 
-    balance = get_admin_balance(storage, telegram_id)
+    balance = get_admin_balance(storage, telegram_id, settings)
     name = link.username or "—"
     langame = f"привязан (id: {link.user_id})" if link.user_id else "не привязан — обратитесь к управляющему"
     await _reply(
@@ -278,6 +278,7 @@ async def admins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await require_manager(update, context):
         return
 
+    settings = context.application.bot_data["settings"]
     storage: Storage = context.application.bot_data["storage"]
     links = storage.list_links(ROLE_ADMIN)
 
@@ -288,7 +289,7 @@ async def admins(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = ["Администраторы бота:"]
     for link in links:
         name = link.username or "—"
-        balance = get_admin_balance(storage, link.telegram_id)
+        balance = get_admin_balance(storage, link.telegram_id, settings)
         langame = f", LANGAME id: {link.user_id}" if link.user_id else ", LANGAME не привязан"
         lines.append(
             f"• {name} — TG: {link.telegram_id}{langame}\n"
