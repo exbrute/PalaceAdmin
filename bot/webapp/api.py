@@ -267,8 +267,12 @@ def _me_payload(request: web.Request) -> dict:
         payload["balance"] = balance_to_dict(get_admin_balance(storage, telegram_id))
     if manager:
         payload["week"]["shift_days"] = storage.list_shift_days(week_start, week_end)
+        admins = storage.list_links(ROLE_ADMIN)
+        payload["team_balance"] = money(sum(
+            get_admin_balance(storage, item.telegram_id).balance for item in admins
+        ))
         payload["stats"] = {
-            "admins": len(storage.list_links(ROLE_ADMIN)),
+            "admins": len(admins),
             "active_fines": storage.count_active_fines(),
             "week_shift_days": len(payload["week"]["shift_days"]),
         }

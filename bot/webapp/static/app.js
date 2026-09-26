@@ -491,11 +491,13 @@
         onclick: () => go(me.is_manager ? "fines" : "myfines"),
       }, icon("bell"), stats.active_fines ? el("span", { class: "dot" }) : null),
       el("div", { class: "spacer" }),
-      me.balance
-        ? el("div", { class: "pill", onclick: () => go("half") },
-          el("span", { class: "coin" }, "₽"), money(me.balance.balance), el("span", { class: "plus" }, icon("plus", "sm")))
-        : el("div", { class: "pill", onclick: () => go("bar-percent") },
-          el("span", { class: "coin" }, "%"), `Бар ${percent(me.bar_percent)}`, el("span", { class: "plus" }, icon("plus", "sm"))),
+      el("div", {
+        class: "pill",
+        onclick: () => go(me.is_manager ? "payroll" : "half"),
+      },
+        el("span", { class: "coin" }, "₽"),
+        money(me.is_manager ? me.team_balance : (me.balance && me.balance.balance)),
+        el("span", { class: "plus" }, icon("plus", "sm"))),
     );
 
     const nodes = [topbar, profileBlock(me)];

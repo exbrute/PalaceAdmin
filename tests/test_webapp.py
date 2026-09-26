@@ -276,6 +276,7 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(shift_day, me["week"]["shift_days"])
         _, manager_me = await self.call("GET", "/api/me", MANAGER_ID)
         self.assertEqual(manager_me["stats"]["admins"], 1)
+        self.assertAlmostEqual(manager_me["team_balance"], me["balance"]["balance"])
         self.assertEqual(manager_me["week"]["shift_days"], me["week"]["shift_days"])
 
         status, current = await self.call("GET", "/api/shift/current", ADMIN_ID)
