@@ -178,7 +178,10 @@
 
   function kvRow(title, value, opts = {}) {
     return el("li", { class: `row${opts.total ? " total" : ""}` },
-      el("div", { class: "grow title" }, title),
+      el("div", { class: "grow" },
+        el("div", { class: "title" }, title),
+        opts.sub ? el("div", { class: "subtitle" }, opts.sub) : null,
+      ),
       el("div", { class: `value mono${opts.neg ? " neg" : ""}${opts.pos ? " pos" : ""}` }, value),
     );
   }
@@ -208,7 +211,7 @@
       kvRow("Период", `${earning.start || "—"} — ${earning.stop || "—"}`),
       kvRow("Продажи бара", `${money(earning.bar_sales)} · ${earning.sales_count} поз.`),
       kvRow(`${percent(earning.bar_percent)} с бара`, money(earning.bar_bonus)),
-      kvRow("Фикс за смену", earning.fixed_text),
+      kvRow("Фикс за смену", money(earning.fixed_total), { sub: earning.fixed_detail }),
       earning.fines ? kvRow("Штрафы", `−${money(earning.fines)}`, { neg: true }) : null,
       kvRow("К выплате за смену", money(earning.net), { total: true }),
     ], cardHead(title || `Смена #${earning.shift_id}`, badge("закрыта", "gray")));
@@ -233,15 +236,13 @@
     }
     rows.push(
       kvRow(`${percent(shift.bar_percent)} с бара (сразу)`, money(shift.bar_bonus)),
-      kvRow("Фикс (ориентир)", shift.fixed_text),
+      kvRow("Фикс (ориентир)", money(shift.fixed_total), { sub: shift.fixed_detail ? `${shift.fixed_detail} — после закрытия` : "после закрытия" }),
     );
     if (shift.fines) rows.push(kvRow("Штрафы", `−${money(shift.fines)}`, { neg: true }));
     rows.push(kvRow("Ожидаемая выплата", money(shift.net), { total: true }));
     const card = kvCard(rows, cardHead(title || `Смена #${shift.shift_id}`, badge("● открыта", "green")));
     if (shift.group_size > 1) {
       card.append(el("div", { class: "note" }, `В клубной смене ${shift.group_size} админа(ов) — фикс пересчитается по часам после закрытия.`));
-    } else {
-      card.append(el("div", { class: "note" }, "Фикс начислится после закрытия смены."));
     }
     return card;
   }
@@ -355,7 +356,7 @@
     }
 
     const nodes = [hero];
-    if (me.needs_link) {
+    if (me.needs_link && !me.is_manager) {
       nodes.push(el("div", { class: "tiles", style: "margin-bottom:10px" },
         tile("🔗", "Привязать аккаунт LANGAME", "link", { wide: true, attention: true, sub: "Без привязки смены не считаются" })));
     }
@@ -389,6 +390,7 @@
         el("div", { class: "tiles" },
           tile("👤", "Профиль", "profile"),
           tile("❓", "Помощь", "help"),
+          me.needs_link ? tile("🔗", "Привязать аккаунт", "link", { wide: true, sub: "Если вы тоже работаете сменами" }) : null,
         ),
       );
     } else {

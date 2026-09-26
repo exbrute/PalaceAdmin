@@ -5,7 +5,7 @@ import re
 from datetime import date, datetime
 
 from bot.config import Settings
-from bot.ledger import AdminBalance, BotPeriodSummary, OpenShiftStats, format_fixed_breakdown
+from bot.ledger import AdminBalance, BotPeriodSummary, OpenShiftStats, fixed_breakdown_parts
 from bot.pay_period import PayPeriod
 from bot.services import get_bar_bonus_percent
 from bot.storage import FineRecord, ShiftEarning, Storage, UserLink
@@ -59,19 +59,18 @@ def earning_to_dict(storage: Storage, settings: Settings, earning: ShiftEarning)
         "bar_bonus": money(earning.bar_bonus),
         "bar_percent": get_bar_bonus_percent(storage, settings),
         "fixed_total": money(earning.fixed_salary),
-        "fixed_text": format_fixed_breakdown(
+        "fixed_detail": " + ".join(fixed_breakdown_parts(
             settings,
             worked_hours=earning.worked_hours,
             fixed_work=earning.fixed_work,
             fixed_cleaning=earning.fixed_cleaning,
-            fixed_total=earning.fixed_salary,
-        ),
+        )),
         "fines": money(fines),
         "net": money(earning.gross_amount - fines),
     }
 
 
-def open_shift_to_dict(stats: OpenShiftStats) -> dict:
+def open_shift_to_dict(stats: OpenShiftStats, settings: Settings) -> dict:
     return {
         "shift_id": stats.shift.id,
         "start": fmt_datetime(stats.shift.date_start),
@@ -80,7 +79,12 @@ def open_shift_to_dict(stats: OpenShiftStats) -> dict:
         "bar_bonus": money(stats.bar_bonus),
         "bar_percent": stats.bar_percent,
         "fixed_total": money(stats.fixed_share.fixed_total),
-        "fixed_text": stats.fixed_text,
+        "fixed_detail": " + ".join(fixed_breakdown_parts(
+            settings,
+            worked_hours=stats.fixed_share.worked_hours,
+            fixed_work=stats.fixed_share.fixed_work,
+            fixed_cleaning=stats.fixed_share.fixed_cleaning,
+        )),
         "fines": money(stats.fines),
         "net": money(stats.net),
         "group_size": stats.group_size,

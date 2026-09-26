@@ -327,7 +327,7 @@ async def get_current_shift(request: web.Request) -> web.Response:
             )
             shifts.append({
                 "admin": admin_brief(link),
-                "shift": open_shift_to_dict(stats),
+                "shift": open_shift_to_dict(stats, settings),
             })
         return web.json_response({"mode": "manager", "shifts": shifts})
 
@@ -339,7 +339,7 @@ async def get_current_shift(request: web.Request) -> web.Response:
     open_shift = find_open_shift(api, link.user_id)
     if open_shift is not None:
         stats = compute_open_shift_stats(api, storage, settings, link, open_shift)
-        return web.json_response({"mode": "open", "shift": open_shift_to_dict(stats)})
+        return web.json_response({"mode": "open", "shift": open_shift_to_dict(stats, settings)})
 
     earnings = storage.list_shift_earnings(link.telegram_id, limit=1)
     if not earnings:
@@ -770,7 +770,7 @@ async def get_shift_report(request: web.Request) -> web.Response:
         return web.json_response({
             "admin": admin_brief(link),
             "open": True,
-            "shift": open_shift_to_dict(stats),
+            "shift": open_shift_to_dict(stats, settings),
         })
 
     earning, error, fixed = sync_shift_by_id(api, storage, settings, link, shift_id)

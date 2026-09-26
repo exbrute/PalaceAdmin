@@ -197,7 +197,9 @@ h1, h2, h3 { margin: 0; }
 
 .kv { padding: 4px 0; }
 .kv .row { min-height: 40px; padding-top: 9px; padding-bottom: 9px; }
-.kv .row .title { font-weight: 400; color: var(--subtitle); }
+.kv .row .title { font-weight: 400; color: var(--subtitle); white-space: normal; }
+.kv .row .subtitle { font-size: 12px; color: var(--hint); }
+.kv .row .value { white-space: normal; max-width: 62%; overflow-wrap: anywhere; }
 .kv .row.total .title { color: var(--text); font-weight: 600; }
 .kv .row.total .value { font-size: 17px; }
 

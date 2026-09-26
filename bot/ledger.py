@@ -94,14 +94,13 @@ def _format_hours(hours: float) -> str:
     return text.replace(".", ",")
 
 
-def format_fixed_breakdown(
+def fixed_breakdown_parts(
     settings: Settings,
     *,
     worked_hours: float,
     fixed_work: float,
     fixed_cleaning: float,
-    fixed_total: float,
-) -> str:
+) -> list[str]:
     hourly = settings.fixed_shift_work / settings.shift_standard_hours
     parts: list[str] = []
     if fixed_work > 0:
@@ -110,6 +109,23 @@ def format_fixed_breakdown(
         )
     if fixed_cleaning > 0:
         parts.append(f"уборка {format_money(fixed_cleaning)}")
+    return parts
+
+
+def format_fixed_breakdown(
+    settings: Settings,
+    *,
+    worked_hours: float,
+    fixed_work: float,
+    fixed_cleaning: float,
+    fixed_total: float,
+) -> str:
+    parts = fixed_breakdown_parts(
+        settings,
+        worked_hours=worked_hours,
+        fixed_work=fixed_work,
+        fixed_cleaning=fixed_cleaning,
+    )
     if parts:
         return f"{format_money(fixed_total)} ({' + '.join(parts)})"
     return format_money(fixed_total)
