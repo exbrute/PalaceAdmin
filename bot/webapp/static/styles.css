@@ -294,7 +294,7 @@ svg.i.lg { width: 26px; height: 26px; }
   height: 118px;
   border-radius: 50%;
   object-fit: cover;
-  filter: blur(1.5px) brightness(0.55);
+  filter: blur(2px) brightness(0.4);
 }
 
 .fcard.wide {
