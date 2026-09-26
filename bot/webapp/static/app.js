@@ -69,11 +69,57 @@
     });
   }
 
-  const AVATAR_COLORS = ["#e17076", "#7bc862", "#65aadd", "#a695e7", "#ee7aae", "#6ec9cb", "#faa774"];
-  function avatar(name, id) {
+  function avatar(name) {
     const letter = (String(name || "?").trim()[0] || "?").toUpperCase();
-    const color = AVATAR_COLORS[Math.abs(Number(id) || 0) % AVATAR_COLORS.length];
-    return el("div", { class: "avatar", style: `background:${color}` }, letter);
+    return el("div", { class: "avatar" }, letter);
+  }
+
+  const ICONS = {
+    home: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    clock: '<circle cx="12" cy="12" r="9.5"/><path d="M12 7v5l3.5 2"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    wallet: '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
+    user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    chart: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
+    percent: '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+    megaphone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+    alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    list: '<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>',
+    plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+    file: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+    chevron: '<path d="m9 18 6-6-6-6"/>',
+    glass: '<path d="M8 22h8"/><path d="M12 11v11"/><path d="m19 3-7 8-7-8Z"/>',
+    minus: '<circle cx="12" cy="12" r="9.5"/><path d="M8 12h8"/>',
+    userPlus: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    refresh: '<path d="M21 12a9 9 0 0 1-15.36 6.36L3 16"/><path d="M3 12a9 9 0 0 1 15.36-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M3 21v-5h5"/>',
+  };
+
+  function icon(name, size) {
+    const span = document.createElement("span");
+    span.style.display = "contents";
+    span.innerHTML = `<svg class="i${size ? ` ${size}` : ""}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+    return span.firstChild;
+  }
+
+  function logoMark(className) {
+    const span = document.createElement("span");
+    span.style.display = "contents";
+    span.innerHTML = `<svg class="${className || ""}" viewBox="0 0 100 92" aria-hidden="true">
+      <defs><linearGradient id="pl-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c77dff"/><stop offset="1" stop-color="#7b1fe0"/></linearGradient></defs>
+      <polygon points="50,4 97,86 3,86" fill="#0b0b0f" stroke="#ffffff" stroke-width="5" stroke-linejoin="round"/>
+      <polygon points="50,24 81,78 19,78" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" opacity=".6"/>
+      <polygon points="50,24 81,78 58,78 50,63" fill="url(#pl-g)"/>
+      <polygon points="50,24 50,63 42,78 19,78" fill="#1a1a22"/>
+    </svg>`;
+    return span.firstChild;
   }
 
   // ---------- API ----------
@@ -130,12 +176,56 @@
     else location.hash = "#/";
   }
 
+  function tabsFor(me) {
+    if (!me || !me.access) return [];
+    if (me.is_manager) {
+      return [
+        { route: "home", label: "Главная", icon: "home", routes: ["home", "help"] },
+        { route: "shift", label: "Смены", icon: "clock", routes: ["shift", "shift-report"] },
+        { route: "team", label: "Команда", icon: "users", routes: ["team", "admin", "add-admin", "add-manager"] },
+        { route: "money", label: "Деньги", icon: "wallet", routes: ["money", "payroll", "leaderboard", "bar-percent", "broadcast", "fines", "fine-new"] },
+        { route: "profile", label: "Профиль", icon: "user", routes: ["profile", "link"] },
+      ];
+    }
+    return [
+      { route: "home", label: "Главная", icon: "home", routes: ["home", "help"] },
+      { route: "shift", label: "Смена", icon: "clock", routes: ["shift"] },
+      { route: "half", label: "Зарплата", icon: "wallet", routes: ["half"] },
+      { route: "profile", label: "Профиль", icon: "user", routes: ["profile", "link", "myfines"] },
+    ];
+  }
+
+  const tabbarEl = document.createElement("nav");
+  tabbarEl.className = "tabbar";
+
+  function renderTabbar(tabs, active) {
+    if (!tabs.length) {
+      tabbarEl.remove();
+      document.body.classList.add("no-tabs");
+      return;
+    }
+    document.body.classList.remove("no-tabs");
+    tabbarEl.replaceChildren(el("div", { class: "inner" }, tabs.map((tab) => el("button", {
+      class: `tab${tab === active ? " active" : ""}`,
+      onclick: () => {
+        if (parseHash().name === tab.route) return;
+        haptic("light");
+        location.hash = `#/${tab.route}`;
+      },
+    }, icon(tab.icon), tab.label))));
+    if (!tabbarEl.isConnected) document.body.append(tabbarEl);
+  }
+
   async function navigate() {
     const route = parseHash();
     const view = routes[route.name] || routes.home;
     const token = ++renderToken;
+    const tabs = tabsFor(state.me);
+    const activeTab = tabs.find((tab) => tab.routes.includes(route.name)) || tabs[0];
+    renderTabbar(tabs, activeTab);
+    const isTabRoot = tabs.some((tab) => tab.route === route.name) || !routes[route.name];
     if (tg && tg.BackButton) {
-      if (route.name === "home") tg.BackButton.hide();
+      if (isTabRoot) tg.BackButton.hide();
       else tg.BackButton.show();
     }
     try {
@@ -320,14 +410,7 @@
 
   // ---------- Views: home ----------
 
-  function tile(icon, label, path, opts = {}) {
-    return el("button", {
-      class: `tile${opts.wide ? " wide" : ""}${opts.attention ? " attention" : ""}`,
-      onclick: () => go(path),
-    },
-    el("div", { class: "icon" }, icon),
-    el("div", null, el("div", { class: "label" }, label), opts.sub ? el("div", { class: "sub" }, opts.sub) : null));
-  }
+  const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
   routes.home = async (_route, isCurrent) => {
     if (!state.me) await load(isCurrent, null, refreshMe, 4);
@@ -335,75 +418,216 @@
     renderHome();
   };
 
+  function tgUser() {
+    return (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || {};
+  }
+
+  function profileBlock(me) {
+    const user = tgUser();
+    const face = el("div", { class: "face" }, (String(me.name || "?").trim()[0] || "?").toUpperCase());
+    if (user.photo_url) {
+      const img = el("img", { src: user.photo_url, alt: "", referrerpolicy: "no-referrer" });
+      img.addEventListener("error", () => img.remove());
+      face.replaceChildren(img);
+    }
+    return el("div", { class: "profile" },
+      el("div", { class: "ring" }, face),
+      el("div", { class: "name" }, me.name),
+      user.username ? el("div", { class: "handle" }, `@${user.username}`) : null,
+      el("span", { class: "chip" }, me.role_label),
+    );
+  }
+
+  function statsRow(items) {
+    return el("div", { class: "stats" }, items.map((item) =>
+      el("div", { class: "s" },
+        el("div", { class: "v" }, icon(item.icon, "sm"), item.value),
+        el("div", { class: "k" }, item.label),
+      )));
+  }
+
+  function weekStrip(me) {
+    const shiftDays = new Set(me.week.shift_days);
+    return el("div", { class: "week" }, me.week.days.map((iso, index) => {
+      const day = Number(iso.slice(8, 10));
+      const isToday = iso === me.today;
+      const isFuture = iso > me.today;
+      const worked = shiftDays.has(iso);
+      return el("div", { class: `day${isToday ? " today" : ""}${isFuture ? " future" : ""}` },
+        el("div", { class: "dots" }, worked ? el("i", { class: "on" }) : (isFuture ? null : el("i"))),
+        el("div", { class: "wd" }, WEEKDAYS[index]),
+        el("div", { class: "dn" }, String(day)),
+      );
+    }));
+  }
+
+  function progressDots(period) {
+    const total = 8;
+    const ratio = Math.min(Math.max((period.day_index || 1) / (period.days_total || 1), 0), 1);
+    const current = Math.max(1, Math.round(ratio * total));
+    const dots = [];
+    for (let i = 1; i <= total; i += 1) {
+      dots.push(el("i", { class: i === current ? "now" : (i < current ? "on" : "") }));
+    }
+    return el("div", { class: "progress-dots" }, dots);
+  }
+
+  function daysWord(n) {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "день";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "дня";
+    return "дней";
+  }
+
+  function fcard(cls, onclick, ...children) {
+    return el("button", { class: `fcard ${cls}`, onclick: () => { haptic("light"); onclick(); } }, children);
+  }
+
+  function quickButton(iconName, label, path) {
+    return el("button", { class: "qbtn", onclick: () => go(path) }, el("span", { class: "ic" }, icon(iconName, "sm")), label);
+  }
+
   function renderHome() {
     const me = state.me;
-    const hero = el("div", { class: "hero" },
-      el("div", { class: "hello" }, "Palace Adms"),
-      el("div", { class: "name" }, me.name),
-      el("span", { class: "role" }, me.role_label),
+    const period = me.period;
+    const stats = me.stats || {};
+    const topbar = el("div", { class: "topbar" },
+      el("button", { class: "icon-btn", "aria-label": "Помощь", onclick: () => go("help") }, icon("help")),
+      el("button", {
+        class: "icon-btn",
+        "aria-label": "Штрафы",
+        onclick: () => go(me.is_manager ? "fines" : "myfines"),
+      }, icon("bell"), stats.active_fines ? el("span", { class: "dot" }) : null),
+      el("div", { class: "spacer" }),
+      me.balance
+        ? el("div", { class: "pill", onclick: () => go("half") },
+          el("span", { class: "coin" }, "₽"), money(me.balance.balance), el("span", { class: "plus" }, icon("plus", "sm")))
+        : el("div", { class: "pill", onclick: () => go("bar-percent") },
+          el("span", { class: "coin" }, "%"), `Бар ${percent(me.bar_percent)}`, el("span", { class: "plus" }, icon("plus", "sm"))),
     );
-    if (me.balance) {
-      hero.append(
-        el("div", { class: "amount-label" }, "Баланс в боте"),
-        el("div", { class: "amount mono" }, money(me.balance.balance)),
-        el("div", { class: "meta" },
-          el("span", null, `Смен: ${me.balance.shifts_count}`),
-          el("span", null, `С бара: ${percent(me.bar_percent)}`),
-        ),
-      );
-    } else if (me.is_manager) {
-      hero.append(el("div", { class: "meta" }, el("span", null, `Процент с бара: ${percent(me.bar_percent)}`)));
-    }
 
-    const nodes = [hero];
-    if (me.needs_link && !me.is_manager) {
-      nodes.push(el("div", { class: "tiles", style: "margin-bottom:10px" },
-        tile("🔗", "Привязать аккаунт LANGAME", "link", { wide: true, attention: true, sub: "Без привязки смены не считаются" })));
-    }
+    const nodes = [topbar, profileBlock(me)];
 
     if (me.is_manager) {
       nodes.push(
-        sectionTitle("Смены"),
-        el("div", { class: "tiles" },
-          tile("💰", "Текущая смена", "shift", { sub: "Кто на смене сейчас" }),
-          tile("📄", "Отчёт смены", "shift-report", { sub: "По id смены" }),
+        statsRow([
+          { icon: "users", value: String(stats.admins || 0), label: "Админов" },
+          { icon: "alert", value: String(stats.active_fines || 0), label: "Штрафов" },
+          { icon: "glass", value: percent(me.bar_percent), label: "С бара" },
+        ]),
+        weekStrip(me),
+        el("div", { class: "feature-row" },
+          fcard("small", () => go("team"),
+            el("div", { class: "bubble" }, String(stats.admins || 0)),
+            el("div", { class: "t" }, "Команда"),
+            el("div", { class: "d accent" }, `${stats.admins || 0} админ.`)),
+          fcard("hero", () => go("payroll"),
+            el("div", { class: "t" }, "Ведомость"),
+            el("div", { class: "d" }, `За ${period.label}. Выплата ${period.next_payout}`),
+            progressDots(period),
+            logoMark("mark")),
         ),
-        sectionTitle("Команда"),
-        el("div", { class: "tiles" },
-          tile("👥", "Команда", "team", { sub: "Админы и управляющие" }),
-          tile("➕", "Добавить админа", "add-admin"),
-          me.is_developer ? tile("🛠", "Добавить управляющего", "add-manager", { wide: true }) : null,
-        ),
-        sectionTitle("Деньги"),
-        el("div", { class: "tiles" },
-          tile("📊", "Ведомость", "payroll", { sub: "За полмесяца + CSV" }),
-          tile("📈", "Рейтинг бара", "leaderboard"),
-          tile("🍹", "% бара", "bar-percent", { sub: percent(me.bar_percent) }),
-          tile("📢", "Рассылка", "broadcast", { sub: "Всем админам" }),
-        ),
-        sectionTitle("Штрафы"),
-        el("div", { class: "tiles" },
-          tile("➖", "Выписать штраф", "fine-new"),
-          tile("📋", "Все штрафы", "fines", { sub: "Снять штраф" }),
-        ),
-        sectionTitle("Прочее"),
-        el("div", { class: "tiles" },
-          tile("👤", "Профиль", "profile"),
-          tile("❓", "Помощь", "help"),
-          me.needs_link ? tile("🔗", "Привязать аккаунт", "link", { wide: true, sub: "Если вы тоже работаете сменами" }) : null,
+        fcard("wide", () => go("shift"),
+          el("div", { class: "art" }, icon("clock", "lg")),
+          el("div", null,
+            el("div", { class: "t" }, "Текущая смена"),
+            el("div", { class: "d" }, "Кто из админов сейчас в клубе, выручка и доля бара"))),
+        el("div", { class: "section-title" }, "Быстрые действия"),
+        el("div", { class: "quick" },
+          quickButton("minus", "Выписать штраф", "fine-new"),
+          quickButton("userPlus", "Добавить админа", "add-admin"),
+          quickButton("file", "Отчёт смены", "shift-report"),
+          quickButton("megaphone", "Рассылка", "broadcast"),
+          me.is_developer ? quickButton("shield", "Добавить управляющего", "add-manager") : null,
+          me.needs_link ? quickButton("link", "Привязать LANGAME", "link") : null,
         ),
       );
     } else {
-      nodes.push(el("div", { class: "tiles" },
-        tile("💰", "Текущая смена", "shift", { sub: "Открытая или последняя" }),
-        tile("📅", "За полмесяца", "half", { sub: "Зарплата за период" }),
-        tile("⚠️", "Мои штрафы", "myfines"),
-        tile("👤", "Профиль", "profile"),
-        tile("❓", "Помощь", "help", { wide: true }),
-      ));
+      nodes.push(
+        statsRow([
+          { icon: "calendar", value: String(stats.period_shifts || 0), label: "Смен" },
+          { icon: "glass", value: percent(me.bar_percent), label: "С бара" },
+          { icon: "cash", value: String(period.days_to_payout), label: `${daysWord(period.days_to_payout)} до выплаты` },
+        ]),
+        weekStrip(me),
+      );
+      if (me.needs_link) {
+        nodes.push(fcard("wide", () => go("link"),
+          el("div", { class: "art" }, icon("link", "lg")),
+          el("div", null,
+            el("div", { class: "t" }, "Привяжите LANGAME"),
+            el("div", { class: "d" }, "Без привязки бот не видит ваши смены и продажи бара"))));
+      }
+      nodes.push(
+        el("div", { class: "feature-row" },
+          fcard("small", () => go("myfines"),
+            el("div", { class: "bubble" }, String(stats.active_fines || 0)),
+            el("div", { class: "t" }, "Штрафы"),
+            el("div", { class: "d accent" }, stats.active_fines ? "активных" : "нет, так держать")),
+          fcard("hero", () => go("half"),
+            el("div", { class: "t" }, `Выплата ${period.next_payout}`),
+            el("div", { class: "d" }, `Период ${period.label}. Осталось ${period.days_to_payout} ${daysWord(period.days_to_payout)}`),
+            progressDots(period),
+            logoMark("mark")),
+        ),
+        fcard("wide", () => go("shift"),
+          el("div", { class: "art" }, icon("clock", "lg")),
+          el("div", null,
+            el("div", { class: "t" }, "Текущая смена"),
+            el("div", { class: "d" }, "Продажи бара, фикс и ожидаемая выплата за смену"))),
+      );
     }
     render(nodes);
   }
+
+  // ---------- Views: manager — money hub ----------
+
+  function menuRow(iconName, title, subtitle, onclick) {
+    return el("li", { class: "row clickable", onclick },
+      el("div", { class: "ic" }, icon(iconName, "sm")),
+      el("div", { class: "grow" },
+        el("div", { class: "title" }, title),
+        subtitle ? el("div", { class: "subtitle" }, subtitle) : null,
+      ),
+      el("div", { class: "chev" }, icon("chevron", "sm")),
+    );
+  }
+
+  routes.money = async () => {
+    const me = state.me;
+    const exportRow = menuRow("download", "Экспорт ведомости CSV", "Файл придёт в чат с ботом", async () => {
+      haptic("light");
+      toast("Формирую ведомость…");
+      try {
+        const result = await api("POST", "/api/payroll/export");
+        haptic("success");
+        toast(result.message);
+      } catch (error) {
+        haptic("error");
+        toast(error.message, "error");
+      }
+    });
+    render(
+      pageTitle("Деньги"),
+      el("div", { class: "section-title", style: "margin-top:0" }, "Зарплата"),
+      el("div", { class: "card" }, el("ul", { class: "list" },
+        menuRow("chart", "Ведомость", `За ${me.period.label} · выплата ${me.period.next_payout}`, () => go("payroll")),
+        exportRow,
+        menuRow("trophy", "Рейтинг бара", "Продажи бара за полмесяца", () => go("leaderboard")),
+        menuRow("percent", "Процент с бара", `Сейчас ${percent(me.bar_percent)}`, () => go("bar-percent")),
+      )),
+      el("div", { class: "section-title" }, "Штрафы"),
+      el("div", { class: "card" }, el("ul", { class: "list" },
+        menuRow("minus", "Выписать штраф", null, () => go("fine-new")),
+        menuRow("list", "Все штрафы", "Посмотреть и снять", () => go("fines")),
+      )),
+      el("div", { class: "section-title" }, "Связь"),
+      el("div", { class: "card" }, el("ul", { class: "list" },
+        menuRow("megaphone", "Рассылка", "Сообщение всем админам в чат", () => go("broadcast")),
+      )),
+    );
+  };
 
   // ---------- Views: administrator ----------
 
@@ -475,7 +699,7 @@
       rows.push(kvRow("LANGAME", me.langame_user_id ? `id ${me.langame_user_id}` : "не привязан"));
       rows.push(kvRow("Email", me.email || "—"));
     }
-    const nodes = [pageTitle("Профиль"), kvCard(rows)];
+    const nodes = [profileBlock(me), kvCard(rows)];
     if (me.balance) {
       nodes.push(kvCard([
         kvRow("Баланс в боте", money(me.balance.balance), { total: true }),
@@ -485,11 +709,12 @@
         kvRow("Выплачено", money(me.balance.settled_total)),
       ]));
     }
-    if (me.needs_link) {
-      nodes.push(el("div", { class: "actions" }, el("button", { class: "btn", onclick: () => go("link") }, "🔗 Привязать аккаунт LANGAME")));
-    } else if (me.langame_user_id) {
-      nodes.push(el("div", { class: "actions" }, el("button", { class: "btn secondary", onclick: () => go("link") }, "Перепривязать LANGAME")));
-    }
+    const menu = [];
+    if (!me.is_manager) menu.push(menuRow("alert", "Мои штрафы", null, () => go("myfines")));
+    if (me.needs_link) menu.push(menuRow("link", "Привязать аккаунт LANGAME", "Без привязки смены не считаются", () => go("link")));
+    else if (me.langame_user_id) menu.push(menuRow("link", "Перепривязать LANGAME", null, () => go("link")));
+    menu.push(menuRow("help", "Помощь", "Как считается зарплата", () => go("help")));
+    nodes.push(el("div", { class: "card" }, el("ul", { class: "list" }, menu)));
     render(nodes);
   };
 
@@ -524,10 +749,10 @@
     const nodes = [pageTitle("Команда")];
 
     nodes.push(el("div", { class: "actions two", style: "margin-top:0" },
-      el("button", { class: "btn", onclick: () => go("add-admin") }, "➕ Админ"),
+      el("button", { class: "btn", onclick: () => go("add-admin") }, "Добавить админа"),
       me.is_developer
-        ? el("button", { class: "btn secondary", onclick: () => go("add-manager") }, "➕ Управляющий")
-        : el("button", { class: "btn secondary", onclick: () => go("fines") }, "📋 Штрафы"),
+        ? el("button", { class: "btn secondary", onclick: () => go("add-manager") }, "Управляющий")
+        : el("button", { class: "btn secondary", onclick: () => go("fines") }, "Штрафы"),
     ));
 
     nodes.push(sectionTitle(`Администраторы · ${data.admins.length}`));
@@ -536,7 +761,7 @@
     } else {
       nodes.push(el("div", { class: "card" }, el("ul", { class: "list" }, data.admins.map((admin) =>
         el("li", { class: "row clickable", onclick: () => go(`admin/${admin.telegram_id}`) },
-          avatar(admin.name, admin.telegram_id),
+          avatar(admin.name),
           el("div", { class: "grow" },
             el("div", { class: "title" }, admin.name),
             el("div", { class: "subtitle" }, admin.langame_user_id ? `LANGAME id ${admin.langame_user_id}` : "LANGAME не привязан"),
@@ -552,7 +777,7 @@
     } else {
       nodes.push(el("div", { class: "card" }, el("ul", { class: "list" }, data.managers.map((manager) => {
         const row = el("li", { class: "row" },
-          avatar(manager.name, manager.telegram_id),
+          avatar(manager.name),
           el("div", { class: "grow" },
             el("div", { class: "title" }, manager.name),
             el("div", { class: "subtitle" }, `TG ${manager.telegram_id}`),
@@ -582,7 +807,7 @@
     if (data.developers.length) {
       nodes.push(sectionTitle("Разработчики"));
       nodes.push(el("div", { class: "card" }, el("ul", { class: "list" }, data.developers.map((id) =>
-        el("li", { class: "row" }, avatar("🛠", id), el("div", { class: "grow title" }, `TG ${id}`))))));
+        el("li", { class: "row" }, el("div", { class: "ic" }, icon("shield", "sm")), el("div", { class: "grow title" }, `TG ${id}`))))));
     }
     render(nodes);
   };
@@ -616,8 +841,8 @@
     }
 
     nodes.push(el("div", { class: "actions two" },
-      el("button", { class: "btn", onclick: () => go(`fine-new?admin=${card.telegram_id}`) }, "➖ Штраф"),
-      el("button", { class: "btn secondary", onclick: () => go(`fines?admin=${card.telegram_id}`) }, "📋 Штрафы"),
+      el("button", { class: "btn", onclick: () => go(`fine-new?admin=${card.telegram_id}`) }, "Штраф"),
+      el("button", { class: "btn secondary", onclick: () => go(`fines?admin=${card.telegram_id}`) }, "Штрафы"),
     ));
 
     if (card.fines.length) {
@@ -640,7 +865,7 @@
           toast(error.message, "error");
         }
       },
-    }, "🚫 Убрать из бота")));
+    }, "Убрать из бота")));
     render(nodes);
   };
 
@@ -692,7 +917,7 @@
     } else {
       nodes.push(el("div", { class: "card" }, el("ul", { class: "list" }, data.rows.map((row) =>
         el("li", { class: "row clickable", onclick: () => go(`admin/${row.telegram_id}`) },
-          avatar(row.name, row.telegram_id),
+          avatar(row.name),
           el("div", { class: "grow" },
             el("div", { class: "title" }, row.name),
             el("div", { class: "subtitle" }, `${row.shifts} смен · баланс ${money(row.balance)}${row.fines ? ` · штрафы −${money(row.fines)}` : ""}`),
@@ -701,7 +926,7 @@
         )))));
       nodes.push(kvCard([kvRow("Итого за полмесяца", money(data.total), { total: true })]));
     }
-    const exportButton = el("button", { class: "btn secondary" }, "📰 Экспорт CSV в чат");
+    const exportButton = el("button", { class: "btn secondary" }, "Экспорт CSV в чат");
     exportButton.addEventListener("click", () => withBusy(exportButton, async () => {
       try {
         const result = await api("POST", "/api/payroll/export");
@@ -763,7 +988,7 @@
     const textarea = el("textarea", { name: "text", required: true, placeholder: "Текст сообщения для всех администраторов" });
     const form = el("form", null,
       el("div", { class: "card" }, el("div", { class: "field" }, el("label", null, "Сообщение"), textarea)),
-      el("div", { class: "actions" }, submitButton("📢 Отправить всем")),
+      el("div", { class: "actions" }, submitButton("Отправить всем")),
     );
     formHandler(form, async () => {
       if (!(await confirmAction("Отправить сообщение всем администраторам?"))) return;
@@ -835,7 +1060,7 @@
 
     const nodes = [pageTitle("Штрафы"), team.admins.length ? filter : null];
     nodes.push(el("div", { class: "actions", style: "margin-top:0" },
-      el("button", { class: "btn", onclick: () => go(`fine-new${adminId ? `?admin=${adminId}` : ""}`) }, "➖ Выписать штраф")));
+      el("button", { class: "btn", onclick: () => go(`fine-new${adminId ? `?admin=${adminId}` : ""}`) }, "Выписать штраф")));
     if (!finesData.fines.length) {
       nodes.push(empty("👍", "Активных штрафов нет."));
     } else {
@@ -927,8 +1152,9 @@
       tg.ready();
       tg.expand();
       try {
-        tg.setHeaderColor("secondary_bg_color");
-        tg.setBackgroundColor("secondary_bg_color");
+        tg.setHeaderColor("#0a0a0d");
+        tg.setBackgroundColor("#0a0a0d");
+        if (tg.setBottomBarColor) tg.setBottomBarColor("#0e0e12");
       } catch (_) { /* older clients */ }
       if (tg.BackButton) tg.BackButton.onClick(back);
     }

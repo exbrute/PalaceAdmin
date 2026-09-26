@@ -243,6 +243,18 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(half["balance"]["shifts_count"], 1)
         self.assertAlmostEqual(half["balance"]["shift_earned"], 2500 + 100.0)
 
+        _, me = await self.call("GET", "/api/me", ADMIN_ID)
+        self.assertEqual(len(me["week"]["days"]), 7)
+        self.assertIn(me["today"], me["week"]["days"])
+        self.assertEqual(me["stats"]["period_shifts"], 1 if in_period else 0)
+        self.assertGreaterEqual(me["period"]["days_to_payout"], 1)
+        shift_day = self.langame.closed_shift.date_start.date().isoformat()
+        if shift_day in me["week"]["days"]:
+            self.assertIn(shift_day, me["week"]["shift_days"])
+        _, manager_me = await self.call("GET", "/api/me", MANAGER_ID)
+        self.assertEqual(manager_me["stats"]["admins"], 1)
+        self.assertEqual(manager_me["week"]["shift_days"], me["week"]["shift_days"])
+
         status, current = await self.call("GET", "/api/shift/current", ADMIN_ID)
         self.assertEqual(current["mode"], "closed")
         self.assertEqual(current["earning"]["shift_id"], 7001)

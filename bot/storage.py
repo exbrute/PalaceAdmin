@@ -645,6 +645,34 @@ class Storage:
         rows = self._conn.execute(query, params).fetchall()
         return [self._row_to_shift_earning(row) for row in rows]
 
+    def list_shift_days(
+        self,
+        date_from: date,
+        date_to: date,
+        telegram_id: int | None = None,
+    ) -> list[str]:
+        query = """
+            SELECT DISTINCT substr(shift_start, 1, 10) AS day
+            FROM shift_earnings
+            WHERE shift_start IS NOT NULL
+              AND date(substr(shift_start, 1, 10)) >= date(?)
+              AND date(substr(shift_start, 1, 10)) <= date(?)
+        """
+        params: list[object] = [date_from.isoformat(), date_to.isoformat()]
+        if telegram_id is not None:
+            query += " AND telegram_id = ?"
+            params.append(telegram_id)
+        rows = self._conn.execute(query + " ORDER BY day", params).fetchall()
+        return [str(row["day"]) for row in rows]
+
+    def count_active_fines(self, telegram_id: int | None = None) -> int:
+        query = "SELECT COUNT(*) AS total FROM fines WHERE cancelled = 0"
+        params: list[object] = []
+        if telegram_id is not None:
+            query += " AND telegram_id = ?"
+            params.append(telegram_id)
+        return int(self._conn.execute(query, params).fetchone()["total"])
+
     def count_shift_earnings(self, telegram_id: int) -> int:
         row = self._conn.execute(
             "SELECT COUNT(*) AS total FROM shift_earnings WHERE telegram_id = ?",

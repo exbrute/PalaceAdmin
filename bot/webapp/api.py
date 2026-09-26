@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from io import BytesIO
 from typing import Any, Awaitable, Callable
 
@@ -244,8 +245,41 @@ def _me_payload(request: web.Request) -> dict:
         "fixed_cleaning": settings.fixed_cleaning,
         "balance": None,
     }
-    if link is not None and link.role == ROLE_ADMIN:
+    today = today_in_timezone(settings.settlement_timezone)
+    period = current_pay_period(today)
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    period_info = period_to_dict(period)
+    period_info.update({
+        "day_index": (today - period.date_from).days + 1,
+        "days_total": (period.next_payout - period.date_from).days,
+        "days_to_payout": (period.next_payout - today).days,
+    })
+    payload["today"] = today.isoformat()
+    payload["period"] = period_info
+    payload["week"] = {
+        "days": [(week_start + timedelta(days=offset)).isoformat() for offset in range(7)],
+        "shift_days": [],
+    }
+
+    is_admin_link = link is not None and link.role == ROLE_ADMIN
+    if is_admin_link:
         payload["balance"] = balance_to_dict(get_admin_balance(storage, telegram_id))
+    if manager:
+        payload["week"]["shift_days"] = storage.list_shift_days(week_start, week_end)
+        payload["stats"] = {
+            "admins": len(storage.list_links(ROLE_ADMIN)),
+            "active_fines": storage.count_active_fines(),
+            "week_shift_days": len(payload["week"]["shift_days"]),
+        }
+    elif is_admin_link:
+        payload["week"]["shift_days"] = storage.list_shift_days(week_start, week_end, telegram_id)
+        payload["stats"] = {
+            "period_shifts": len(
+                storage.list_shift_earnings(telegram_id, period.date_from, period.date_to)
+            ),
+            "active_fines": storage.count_active_fines(telegram_id),
+        }
     return payload
 
 
