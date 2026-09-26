@@ -110,16 +110,7 @@
   }
 
   function logoMark(className) {
-    const span = document.createElement("span");
-    span.style.display = "contents";
-    span.innerHTML = `<svg class="${className || ""}" viewBox="0 0 100 92" aria-hidden="true">
-      <defs><linearGradient id="pl-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c77dff"/><stop offset="1" stop-color="#7b1fe0"/></linearGradient></defs>
-      <polygon points="50,4 97,86 3,86" fill="#0b0b0f" stroke="#ffffff" stroke-width="5" stroke-linejoin="round"/>
-      <polygon points="50,24 81,78 19,78" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round" opacity=".6"/>
-      <polygon points="50,24 81,78 58,78 50,63" fill="url(#pl-g)"/>
-      <polygon points="50,24 50,63 42,78 19,78" fill="#1a1a22"/>
-    </svg>`;
-    return span.firstChild;
+    return el("img", { class: className || "mark", src: "/static/logo.jpg", alt: "Palace Arena" });
   }
 
   // ---------- API ----------
