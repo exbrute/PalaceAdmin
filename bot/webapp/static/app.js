@@ -452,17 +452,6 @@
     }));
   }
 
-  function progressDots(period) {
-    const total = 8;
-    const ratio = Math.min(Math.max((period.day_index || 1) / (period.days_total || 1), 0), 1);
-    const current = Math.max(1, Math.round(ratio * total));
-    const dots = [];
-    for (let i = 1; i <= total; i += 1) {
-      dots.push(el("i", { class: i === current ? "now" : (i < current ? "on" : "") }));
-    }
-    return el("div", { class: "progress-dots" }, dots);
-  }
-
   function daysWord(n) {
     const mod10 = n % 10;
     const mod100 = n % 100;
@@ -518,7 +507,6 @@
           fcard("hero", () => go("payroll"),
             el("div", { class: "t" }, "Ведомость"),
             el("div", { class: "d" }, `За ${period.label}. Выплата ${period.next_payout}`),
-            progressDots(period),
             logoMark("mark")),
         ),
         fcard("wide", () => go("shift"),
@@ -561,7 +549,6 @@
           fcard("hero", () => go("half"),
             el("div", { class: "t" }, `Выплата ${period.next_payout}`),
             el("div", { class: "d" }, `Период ${period.label}. Осталось ${period.days_to_payout} ${daysWord(period.days_to_payout)}`),
-            progressDots(period),
             logoMark("mark")),
         ),
         fcard("wide", () => go("shift"),
