@@ -860,9 +860,12 @@
     render(nodes);
   };
 
-  function personForm({ title, nameLabel, submitLabel, endpoint }) {
+  function personForm({ title, nameLabel, submitLabel, endpoint, langame = false }) {
     const nameInput = el("input", { name: "name", required: true, minlength: "2", placeholder: "Иван" });
     const idInput = el("input", { name: "telegram_id", required: true, inputmode: "numeric", pattern: "[0-9]*", placeholder: "123456789" });
+    const langameInput = langame
+      ? el("input", { name: "langame_id", inputmode: "numeric", pattern: "[0-9]*", placeholder: "501" })
+      : null;
     const form = el("form", null,
       el("div", { class: "card" },
         el("div", { class: "field" }, el("label", null, nameLabel), nameInput),
@@ -871,13 +874,23 @@
           idInput,
           el("div", { class: "help" }, "Человек может узнать свой ID, написав боту /start — бот покажет его."),
         ),
+        langameInput ? el("div", { class: "field" },
+          el("label", null, "LANGAME ID"),
+          langameInput,
+          el("div", { class: "help" }, "Необязательно. Id администратора в LANGAME — смены начнут считаться сразу."),
+        ) : null,
       ),
       el("div", { class: "actions" }, submitButton(submitLabel)),
     );
     formHandler(form, async () => {
-      const result = await api("POST", endpoint, { name: nameInput.value, telegram_id: idInput.value });
+      const payload = { name: nameInput.value, telegram_id: idInput.value };
+      if (langameInput && langameInput.value.trim()) payload.langame_id = langameInput.value.trim();
+      const result = await api("POST", endpoint, payload);
       haptic("success");
-      toast(result.notified === false ? `${result.message}. Уведомление не доставлено — пусть напишет боту /start.` : result.message);
+      const notice = result.notified === false
+        ? `${result.message}. Уведомление не доставлено — пусть напишет боту /start.`
+        : result.message;
+      toast(result.sync_error ? `${notice} ${result.sync_error}` : notice);
       location.hash = "#/team";
     });
     render(pageTitle(title), form);
@@ -889,6 +902,7 @@
     nameLabel: "Имя администратора",
     submitLabel: "Добавить администратора",
     endpoint: "/api/admins",
+    langame: true,
   });
 
   routes["add-manager"] = async () => personForm({

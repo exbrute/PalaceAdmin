@@ -224,6 +224,29 @@ class ApiTests(unittest.IsolatedAsyncioTestCase):
         status, _ = await self.call("POST", "/api/admins", MANAGER_ID, {"name": "X", "telegram_id": "abc"})
         self.assertEqual(status, 400)
 
+        status, linked = await self.call(
+            "POST", "/api/admins", MANAGER_ID,
+            {"name": "Ольга", "telegram_id": "41", "langame_id": "502"},
+        )
+        self.assertEqual(status, 200, linked)
+        self.assertEqual(linked["langame_user_id"], 502)
+        created = self.storage.get_link(41)
+        self.assertEqual(created.user_id, 502)
+        self.assertEqual(created.email, "other@club.ru")
+        self.assertEqual(created.username, "Ольга")
+
+        status, _ = await self.call(
+            "POST", "/api/admins", MANAGER_ID,
+            {"name": "Петр", "telegram_id": "42", "langame_id": "502"},
+        )
+        self.assertEqual(status, 409)
+        status, _ = await self.call(
+            "POST", "/api/admins", MANAGER_ID,
+            {"name": "Петр", "telegram_id": "42", "langame_id": "999"},
+        )
+        self.assertEqual(status, 404)
+        self.storage.remove_admin(41)
+
         status, team = await self.call("GET", "/api/team", MANAGER_ID)
         self.assertEqual([a["telegram_id"] for a in team["admins"]], [ADMIN_ID])
 

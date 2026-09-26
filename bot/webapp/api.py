@@ -504,11 +504,41 @@ async def post_admin(request: web.Request) -> web.Response:
             f"Администратор уже добавлен: {existing.username or existing.telegram_id}", 409
         )
 
+    langame_query = str(body.get("langame_id") or "").strip()
+    matched = None
+    if langame_query:
+        api = _langame(request)
+        matched = resolve_langame_user(langame_query, api.get_users())
+        if not matched:
+            raise ApiError("Администратор не найден в LANGAME. Проверьте id.", 404)
+        owner = storage.get_link_by_user_id(matched.id)
+        if owner is not None:
+            raise ApiError("Этот аккаунт LANGAME уже привязан к другому пользователю", 409)
+
     storage.register_admin(telegram_id=telegram_id, username=name)
+    synced = 0
+    sync_error = None
+    if matched is not None:
+        storage.attach_langame(
+            telegram_id=telegram_id,
+            user_id=matched.id,
+            email=matched.email,
+            langame_username=matched.username,
+        )
+        link = storage.get_link(telegram_id)
+        if link is not None:
+            synced, sync_error, _ = sync_admin_shifts(api, storage, settings, link)
+
     notified = await _notify(request, telegram_id, admin_added_notify(name))
+    message = f"Администратор добавлен: {name} (TG: {telegram_id})"
+    if matched is not None:
+        message += f". LANGAME привязан: id {matched.id}"
     return web.json_response({
-        "message": f"Администратор добавлен: {name} (TG: {telegram_id})",
+        "message": message,
         "notified": notified,
+        "langame_user_id": matched.id if matched is not None else None,
+        "synced": synced,
+        "sync_error": plain(sync_error) if sync_error else None,
     })
 
 
