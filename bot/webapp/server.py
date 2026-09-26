@@ -26,8 +26,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 @web.middleware
 async def no_cache_middleware(request: web.Request, handler) -> web.StreamResponse:
     response = await handler(request)
-    if request.path == "/" or request.path.startswith("/api/"):
-        response.headers["Cache-Control"] = "no-store"
+    response.headers["Cache-Control"] = "no-store"
     return response
 
 
