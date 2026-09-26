@@ -443,7 +443,36 @@ def format_manager_current_shift_summary(
     return "\n\n".join(sections) if sections else None
 
 
-def format_open_shift_line(
+@dataclass(frozen=True)
+class OpenShiftStats:
+    shift: WorkingShift
+    bar_total: float
+    bar_bonus: float
+    sales_count: int
+    bar_percent: float
+    fixed_share: FixedShare
+    fixed_text: str
+    fines: float
+    net: float
+    group_size: int
+    nal: float | None = None
+    beznal: float | None = None
+
+    @property
+    def total_revenue(self) -> float | None:
+        if self.nal is None or self.beznal is None:
+            return None
+        return self.nal + self.beznal
+
+    @property
+    def bar_share_percent(self) -> float | None:
+        total = self.total_revenue
+        if not total or total <= 0:
+            return None
+        return self.bar_total / total * 100
+
+
+def compute_open_shift_stats(
     api: LangameClient,
     storage: Storage,
     settings: Settings,
@@ -451,7 +480,7 @@ def format_open_shift_line(
     shift: WorkingShift,
     *,
     include_revenue_share: bool = False,
-) -> str | None:
+) -> OpenShiftStats:
     try:
         all_shifts = api.get_working_shifts()
     except LangameApiError:
@@ -481,42 +510,73 @@ def format_open_shift_line(
         fixed_total=fixed_share.fixed_total,
     )
     fines = storage.sum_fines(link.telegram_id, shift.id)
-    bar_percent = format_percent(get_bar_bonus_percent(storage, settings))
+
+    nal: float | None = None
+    beznal: float | None = None
+    if include_revenue_share:
+        nal, beznal = resolve_shift_nal_beznal(api, shift, date_from, date_to)
+
+    return OpenShiftStats(
+        shift=shift,
+        bar_total=bar_total,
+        bar_bonus=bar_bonus,
+        sales_count=sales_count,
+        bar_percent=get_bar_bonus_percent(storage, settings),
+        fixed_share=fixed_share,
+        fixed_text=fixed_text,
+        fines=fines,
+        net=bar_bonus + fixed_share.fixed_total - fines,
+        group_size=len(group),
+        nal=nal,
+        beznal=beznal,
+    )
+
+
+def format_open_shift_line(
+    api: LangameClient,
+    storage: Storage,
+    settings: Settings,
+    link: UserLink,
+    shift: WorkingShift,
+    *,
+    include_revenue_share: bool = False,
+) -> str | None:
+    stats = compute_open_shift_stats(
+        api, storage, settings, link, shift, include_revenue_share=include_revenue_share
+    )
+    bar_percent = format_percent(stats.bar_percent)
 
     start = "—"
     if shift.date_start:
         start = shift.date_start.strftime("%d.%m.%Y %H:%M")
 
-    net = bar_bonus + fixed_share.fixed_total - fines
     lines = [
         f"{e('check')} Текущая смена (открыта)",
         "",
         f"{e('gear')} Смена #{shift.id}",
         f"{e('date')} Начало: {start}",
-        f"{e('burger')} Продажи бара: {format_money(bar_total)} ({sales_count} поз.)",
+        f"{e('burger')} Продажи бара: {format_money(stats.bar_total)} ({stats.sales_count} поз.)",
     ]
     if include_revenue_share:
-        nal, beznal = resolve_shift_nal_beznal(api, shift, date_from, date_to)
-        total_revenue = nal + beznal
+        total_revenue = stats.total_revenue or 0.0
         if total_revenue > 0:
-            bar_share = bar_total / total_revenue * 100
             lines.extend([
-                f"{e('money')} Нал: {format_money(nal)}",
-                f"{e('card')} Безнал: {format_money(beznal)}",
+                f"{e('money')} Нал: {format_money(stats.nal or 0.0)}",
+                f"{e('card')} Безнал: {format_money(stats.beznal or 0.0)}",
                 f"{e('chart_up')} Общая выручка: {format_money(total_revenue)}",
-                f"{e('chart')} Бар от выручки: {format_percent(bar_share)}%",
+                f"{e('chart')} Бар от выручки: {format_percent(stats.bar_share_percent or 0.0)}%",
             ])
         else:
             lines.append(f"{e('chart')} Бар от выручки: — (выручка пока 0 ₽)")
     lines.extend([
-        f"{e('money')} {bar_percent}% с бара: {format_money(bar_bonus)} — начисляется сразу",
-        f"{e('refresh')} Фикс (ориентир): {fixed_text} — после закрытия",
+        f"{e('money')} {bar_percent}% с бара: {format_money(stats.bar_bonus)} — начисляется сразу",
+        f"{e('refresh')} Фикс (ориентир): {stats.fixed_text} — после закрытия",
     ])
-    if len(group) > 1:
-        lines.append(f"{e('info')} В клубной смене {len(group)} админов — фикс пересчитается по часам")
-    if fines:
-        lines.append(f"{e('warning')} Штрафы: −{format_money(fines)}")
-    lines.append(f"{e('money_bag')} Ожидаемая выплата за смену: {format_money(net)}")
+    if stats.group_size > 1:
+        lines.append(f"{e('info')} В клубной смене {stats.group_size} админов — фикс пересчитается по часам")
+    if stats.fines:
+        lines.append(f"{e('warning')} Штрафы: −{format_money(stats.fines)}")
+    lines.append(f"{e('money_bag')} Ожидаемая выплата за смену: {format_money(stats.net)}")
     return "\n".join(lines)
 
 
