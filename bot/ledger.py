@@ -17,6 +17,7 @@ from bot.shift_fixed import (
     club_shift_key,
     distribute_club_shift_fixed,
     estimate_open_shift_fixed,
+    first_opener_id,
 )
 from bot.storage import ShiftEarning, Storage, UserLink
 
@@ -179,7 +180,11 @@ def recalculate_club_shift_group(
     if not group:
         return [], None
 
-    shares = distribute_club_shift_fixed(group, settings)
+    # Hourly pay stays inside the linked closed group. Cleaning does not:
+    # the opener is the earliest shift of the club day, even if that shift
+    # is still open or belongs to an admin this bot does not know.
+    opener_id = first_opener_id(all_shifts, settings, club_key)
+    shares = distribute_club_shift_fixed(group, settings, first_opener_id=opener_id)
     newly_synced: list[int] = []
 
     for shift in group:
@@ -219,6 +224,20 @@ def recalculate_club_shift_group(
     return newly_synced, None
 
 
+def _cleaning_assignment_mismatch(
+    storage: Storage,
+    settings: Settings,
+    all_shifts: list[WorkingShift],
+    shift: WorkingShift,
+    club_key: str,
+) -> bool:
+    earning = storage.get_shift_earning(shift.id)
+    if earning is None:
+        return False
+    should_clean = first_opener_id(all_shifts, settings, club_key) == shift.id
+    return (earning.fixed_cleaning > 0) != should_clean
+
+
 def sync_admin_shifts(
     api: LangameClient,
     storage: Storage,
@@ -238,10 +257,12 @@ def sync_admin_shifts(
     for shift in user_shifts:
         if not shift_eligible_for_earnings(shift, settings):
             continue
-        if storage.has_shift_earning(shift.id):
-            continue
         key = club_shift_key(shift, settings)
-        if key:
+        if not key:
+            continue
+        if not storage.has_shift_earning(shift.id) or _cleaning_assignment_mismatch(
+            storage, settings, all_shifts, shift, key
+        ):
             keys_to_process.add(key)
 
     synced = 0
@@ -514,7 +535,8 @@ def compute_open_shift_stats(
         shift, sales, settings, storage
     )
     group = _linked_club_group(all_shifts, storage, settings, shift)
-    is_first_opener = bool(group) and group[0].id == shift.id
+    opener_id = first_opener_id(all_shifts, settings, club_shift_key(shift, settings))
+    is_first_opener = opener_id == shift.id
     fixed_share = estimate_open_shift_fixed(
         shift, settings=settings, is_first_opener=is_first_opener
     )

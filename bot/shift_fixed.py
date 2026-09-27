@@ -66,14 +66,39 @@ def estimate_open_shift_fixed(
     return FixedShare(shift.id, hours, fixed_work, cleaning)
 
 
+def first_opener_id(
+    shifts: list[WorkingShift],
+    settings: Settings,
+    club_key: str | None,
+) -> int | None:
+    """Earliest shift of the club day, linked or not, open or closed.
+
+    Cleaning belongs to whoever opened the club day first. A shift that the bot
+    does not pay still counts: the later paid admin is not the opener.
+    """
+    if not club_key:
+        return None
+    candidates = [
+        shift
+        for shift in shifts
+        if shift.date_start is not None and club_shift_key(shift, settings) == club_key
+    ]
+    if not candidates:
+        return None
+    opener = min(candidates, key=lambda shift: (shift.date_start, shift.id))
+    return opener.id
+
+
 def distribute_club_shift_fixed(
     shifts: list[WorkingShift],
     settings: Settings,
+    *,
+    first_opener_id: int | None = None,
 ) -> dict[int, FixedShare]:
     if not shifts:
         return {}
 
-    ordered = sorted(shifts, key=lambda item: item.date_start or datetime.min)
+    ordered = sorted(shifts, key=lambda item: (item.date_start or datetime.min, item.id))
     hours_by_shift = {shift.id: shift_worked_hours(shift) for shift in ordered}
     total_hours = sum(hours_by_shift.values())
     if total_hours <= 0:
@@ -86,7 +111,10 @@ def distribute_club_shift_fixed(
     work_pool = settings.fixed_shift_work * billable_hours / settings.shift_standard_hours
     work_parts = _split_pool(work_pool, [hours_by_shift[shift.id] for shift in ordered])
 
-    first_opener_id = ordered[0].id
+    # None means "first of this paid list" (callers that already filtered).
+    # An explicit id that is not in the list awards cleaning to nobody here.
+    if first_opener_id is None:
+        first_opener_id = ordered[0].id
     result: dict[int, FixedShare] = {}
     for shift, fixed_work in zip(ordered, work_parts, strict=True):
         cleaning = settings.fixed_cleaning if shift.id == first_opener_id else 0.0
