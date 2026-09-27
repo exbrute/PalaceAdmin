@@ -485,7 +485,7 @@
         onclick: () => go(me.is_manager ? "payroll" : "half"),
       },
         el("span", { class: "coin" }, "₽"),
-        money(me.is_manager ? me.team_balance : (me.balance && me.balance.balance)),
+        money(me.is_manager ? me.team_balance : me.period_net),
         el("span", { class: "plus" }, icon("plus", "sm"))),
     );
 

@@ -262,15 +262,19 @@ def _me_payload(request: web.Request) -> dict:
         "shift_days": [],
     }
 
+    def period_net(telegram_id: int) -> float:
+        return get_period_summary(
+            storage, telegram_id, period.date_from, period.date_to
+        ).net_amount
+
     is_admin_link = link is not None and link.role == ROLE_ADMIN
     if is_admin_link:
         payload["balance"] = balance_to_dict(get_admin_balance(storage, telegram_id))
+        payload["period_net"] = money(period_net(telegram_id))
     if manager:
         payload["week"]["shift_days"] = storage.list_shift_days(week_start, week_end)
         admins = storage.list_links(ROLE_ADMIN)
-        payload["team_balance"] = money(sum(
-            get_admin_balance(storage, item.telegram_id).balance for item in admins
-        ))
+        payload["team_balance"] = money(sum(period_net(item.telegram_id) for item in admins))
         payload["stats"] = {
             "admins": len(admins),
             "active_fines": storage.count_active_fines(),
