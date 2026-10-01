@@ -74,7 +74,8 @@ def welcome_admin(*, langame_linked: bool, bar_bonus_percent: float, fixed_salar
     pct = format_percent(bar_bonus_percent)
     text = (
         f"{e('wave')} Привет! Я считаю вашу зарплату.\n\n"
-        f"{e('money')} {h(format_money(fixed_salary))} за клубную смену (12 ч)\n"
+        f"{e('money')} {h(format_money(fixed_salary))} за клубную смену "
+        f"(до 03:00, в пятницу и субботу до 08:00)\n"
         f"   работа по часам + {h(format_money(500))} уборка первому админу\n"
         f"{e('burger')} + {h(pct)}% от продаж бара — сразу при продаже\n"
         f"{e('date')} Выплаты: 16-го (за 1–15) и 1-го (за 16–конец месяца)\n\n"
