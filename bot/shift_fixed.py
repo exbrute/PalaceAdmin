@@ -30,6 +30,24 @@ def round_hours_to_quarter(hours: float) -> float:
     return quarters / 4
 
 
+def _as_club_time(value: datetime, tz: ZoneInfo) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=tz)
+    return value.astimezone(tz)
+
+
+def club_day_date(shift: WorkingShift, settings: Settings):
+    """Calendar date of the club day. A start before 10:00 belongs to the previous day."""
+    if shift.date_start is None:
+        return None
+    tz = ZoneInfo(settings.settlement_timezone)
+    local_start = _as_club_time(shift.date_start, tz)
+    day = local_start.date()
+    if local_start.hour < CLUB_DAY_ROLLOVER_HOUR:
+        day -= timedelta(days=1)
+    return day
+
+
 def shift_worked_hours(shift: WorkingShift) -> float:
     if shift.date_start is None or shift.date_stop is None:
         return 0.0
