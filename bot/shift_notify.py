@@ -14,6 +14,7 @@ from bot.config import Settings
 from bot.half_month_report import prepare_half_month_report
 from bot.langame_api import LangameApiError, LangameClient
 from bot.pay_period import completed_pay_period, is_half_month_closing_day
+from bot.shift_fixed import club_day_date
 from bot.roles import list_manager_telegram_ids
 from bot.services import get_bar_bonus_percent
 from bot.shift_close_export import (
@@ -123,15 +124,16 @@ def _has_open_admin_shifts(api: LangameClient, storage: Storage) -> bool:
 async def maybe_notify_half_month_close(
     context: ContextTypes.DEFAULT_TYPE,
     *,
-    shift_stop: datetime,
+    shift,
 ) -> None:
     settings: Settings = context.application.bot_data["settings"]
     api: LangameClient = context.application.bot_data["api"]
     storage: Storage = context.application.bot_data["storage"]
-    tz = ZoneInfo(settings.settlement_timezone)
-    close_day = shift_stop.astimezone(tz).date()
+    # Club day follows the shift start. A night that ends at 03:00 already
+    # belongs to the previous day, so the 15th must not close when the 14th ends.
+    close_day = club_day_date(shift, settings)
 
-    if not is_half_month_closing_day(close_day):
+    if close_day is None or not is_half_month_closing_day(close_day):
         return
     if _has_open_admin_shifts(api, storage):
         return
@@ -248,4 +250,4 @@ async def poll_shift_notifications(context: ContextTypes.DEFAULT_TYPE) -> None:
         storage.mark_shift_notification(shift.id, EVENT_SHIFT_CLOSED)
         logger.info("Notified managers: shift #%s closed (%s)", shift.id, name)
         if shift.date_stop is not None:
-            await maybe_notify_half_month_close(context, shift_stop=shift.date_stop)
+            await maybe_notify_half_month_close(context, shift=shift)
