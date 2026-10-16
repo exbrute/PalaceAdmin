@@ -510,6 +510,16 @@ class Storage:
         ).fetchone()
         return float(row["total"])
 
+    def delete_shift_earning(self, shift_id: int) -> bool:
+        cursor = self._conn.execute(
+            "DELETE FROM shift_earnings WHERE shift_id = ?",
+            (shift_id,),
+        )
+        deleted = cursor.rowcount > 0
+        if deleted:
+            self._conn.commit()
+        return deleted
+
     def has_shift_earning(self, shift_id: int) -> bool:
         row = self._conn.execute(
             "SELECT 1 FROM shift_earnings WHERE shift_id = ?",

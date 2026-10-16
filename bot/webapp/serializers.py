@@ -8,6 +8,7 @@ from bot.config import Settings
 from bot.ledger import AdminBalance, BotPeriodSummary, OpenShiftStats, fixed_breakdown_parts
 from bot.pay_period import PayPeriod
 from bot.services import get_bar_bonus_percent
+from bot.shift_fixed import shift_opened_before_paid_start
 from bot.storage import FineRecord, ShiftEarning, Storage, UserLink
 
 _TG_EMOJI_RE = re.compile(r'<tg-emoji emoji-id="\d+">(.*?)</tg-emoji>')
@@ -93,6 +94,11 @@ def open_shift_to_dict(stats: OpenShiftStats, settings: Settings) -> dict:
         "total_revenue": None if stats.total_revenue is None else money(stats.total_revenue),
         "bar_share_percent": (
             None if stats.bar_share_percent is None else round(stats.bar_share_percent, 2)
+        ),
+        "unpaid_reason": (
+            "Смена открыта до 15:00 и в оплату не входит"
+            if shift_opened_before_paid_start(stats.shift, settings)
+            else None
         ),
     }
 

@@ -18,6 +18,7 @@ from bot.shift_fixed import (
     distribute_club_shift_fixed,
     estimate_open_shift_fixed,
     first_opener_id,
+    shift_opened_before_paid_start,
 )
 from bot.storage import ShiftEarning, Storage, UserLink
 
@@ -47,6 +48,8 @@ class BotPeriodSummary:
 
 
 def shift_eligible_for_earnings(shift: WorkingShift, settings: Settings) -> bool:
+    if shift_opened_before_paid_start(shift, settings):
+        return False
     if settings.earnings_start_date is None:
         return True
     if not shift.date_start:
@@ -224,6 +227,25 @@ def recalculate_club_shift_group(
     return newly_synced, None
 
 
+def _discard_unpaid_early_shift(
+    storage: Storage,
+    settings: Settings,
+    shift: WorkingShift,
+) -> str | None:
+    """Drop pay for a shift opened before 15:00.
+
+    Returns the club key when a stored earning was removed, so the remaining
+    shifts of that day can be split again without those hours.
+    """
+    if not shift_opened_before_paid_start(shift, settings):
+        return None
+    had_earning = storage.delete_shift_earning(shift.id)
+    storage.purge_bar_credits_for_shifts([shift.id])
+    if not had_earning:
+        return None
+    return club_shift_key(shift, settings)
+
+
 def _cleaning_assignment_mismatch(
     storage: Storage,
     settings: Settings,
@@ -252,8 +274,14 @@ def sync_admin_shifts(
     except LangameApiError as exc:
         return 0, str(exc), []
 
-    user_shifts = filter_shifts_for_user(all_shifts, link.user_id, only_closed=True)
+    user_shifts = filter_shifts_for_user(all_shifts, link.user_id, only_closed=False)
     keys_to_process: set[str] = set()
+    for shift in user_shifts:
+        club_key = _discard_unpaid_early_shift(storage, settings, shift)
+        if club_key:
+            keys_to_process.add(club_key)
+
+    user_shifts = filter_shifts_for_user(all_shifts, link.user_id, only_closed=True)
     for shift in user_shifts:
         if not shift_eligible_for_earnings(shift, settings):
             continue
@@ -304,8 +332,16 @@ def sync_shift_by_id(
         return None, f"{e('prohibited')} Эта смена принадлежит другому администратору", None
     if shift.date_stop is None:
         return None, f"{e('refresh')} Смена ещё не закрыта — фикс начислится после закрытия", None
+    if shift_opened_before_paid_start(shift, settings):
+        club_key = _discard_unpaid_early_shift(storage, settings, shift)
+        if club_key:
+            _, error = recalculate_club_shift_group(api, storage, settings, all_shifts, club_key)
+            if error:
+                return None, error, None
+        return None, f"{e('cancel')} Смена, открытая до 15:00, не учитывается", None
     if not shift_eligible_for_earnings(shift, settings):
-        return None, f"{e('cancel')} Смена до {settings.earnings_start_date.strftime('%d.%m.%Y')} не учитывается", None
+        started = settings.earnings_start_date.strftime("%d.%m.%Y") if settings.earnings_start_date else ""
+        return None, f"{e('cancel')} Смена до {started} не учитывается", None
 
     club_key = club_shift_key(shift, settings)
     if club_key is None:
@@ -540,6 +576,9 @@ def compute_open_shift_stats(
     fixed_share = estimate_open_shift_fixed(
         shift, settings=settings, is_first_opener=is_first_opener
     )
+    if shift_opened_before_paid_start(shift, settings):
+        bar_bonus = 0.0
+        fixed_share = FixedShare(shift.id, 0.0, 0.0, 0.0)
     fixed_text = format_fixed_breakdown(
         settings,
         worked_hours=fixed_share.worked_hours,

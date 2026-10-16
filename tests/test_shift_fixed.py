@@ -9,7 +9,13 @@ from zoneinfo import ZoneInfo
 from bot.config import Settings
 from bot.langame_api import WorkingShift
 from bot.ledger import compute_open_shift_stats, recalculate_club_shift_group, sync_admin_shifts
-from bot.shift_fixed import club_shift_key, distribute_club_shift_fixed, first_opener_id
+from bot.shift_fixed import (
+    club_shift_key,
+    distribute_club_shift_fixed,
+    first_opener_id,
+    shift_opened_before_paid_start,
+)
+from bot.webapp.serializers import open_shift_to_dict
 from bot.storage import Storage, UserLink
 
 TZ = ZoneInfo("Europe/Moscow")
@@ -77,7 +83,7 @@ class CleaningAssignmentTests(unittest.TestCase):
         earlier = shift(
             100,
             10,
-            datetime(2026, 9, 21, 12, 0, tzinfo=TZ),
+            datetime(2026, 9, 21, 15, 0, tzinfo=TZ),
             datetime(2026, 9, 22, 0, 0, tzinfo=TZ),
         )
         later = shift(
@@ -282,3 +288,103 @@ class CleaningAssignmentTests(unittest.TestCase):
         self.assertEqual(earning.bar_sales, 999)
         self.assertEqual(earning.fixed_cleaning, 0)
         self.assertEqual(api.sales_calls, 0)
+
+    def test_shift_opened_before_15_is_not_paid(self) -> None:
+        early = shift(
+            10,
+            1,
+            datetime(2026, 10, 12, 14, 59, tzinfo=TZ),
+            datetime(2026, 10, 13, 3, 0, tzinfo=TZ),
+        )
+        on_time = shift(
+            11,
+            1,
+            datetime(2026, 10, 12, 15, 0, tzinfo=TZ),
+            datetime(2026, 10, 13, 3, 0, tzinfo=TZ),
+        )
+        self.assertTrue(shift_opened_before_paid_start(early, self.settings))
+        self.assertFalse(shift_opened_before_paid_start(on_time, self.settings))
+
+    def test_sync_drops_shift_opened_before_15_and_keeps_later_split(self) -> None:
+        early = shift(
+            140,
+            10,
+            datetime(2026, 10, 12, 14, 0, tzinfo=TZ),
+            datetime(2026, 10, 12, 17, 0, tzinfo=TZ),
+        )
+        later = shift(
+            141,
+            20,
+            datetime(2026, 10, 12, 17, 0, tzinfo=TZ),
+            datetime(2026, 10, 13, 5, 0, tzinfo=TZ),
+        )
+        self.storage.link_admin(10, 10, "day@club.ru", "День")
+        self.storage.link_admin(20, 20, "night@club.ru", "Ночь")
+        self.storage.add_shift_earning(
+            shift_id=140,
+            telegram_id=10,
+            langame_user_id=10,
+            shift_start=early.date_start.isoformat(timespec="seconds"),
+            shift_stop=early.date_stop.isoformat(timespec="seconds") if early.date_stop else None,
+            bar_sales=100,
+            bar_bonus=20,
+            fixed_salary=1000,
+            gross_amount=1020,
+            sales_count=1,
+            worked_hours=3,
+            fixed_work=500,
+            fixed_cleaning=500,
+            club_shift_key="1:2026-10-12",
+        )
+        self.storage.add_bar_sale_credit(
+            sale_id=1,
+            telegram_id=10,
+            shift_id=140,
+            sale_amount=100,
+            bonus_amount=20,
+        )
+        self.storage.add_shift_earning(
+            shift_id=141,
+            telegram_id=20,
+            langame_user_id=20,
+            shift_start=later.date_start.isoformat(timespec="seconds"),
+            shift_stop=later.date_stop.isoformat(timespec="seconds") if later.date_stop else None,
+            bar_sales=0,
+            bar_bonus=0,
+            fixed_salary=1680,
+            gross_amount=1680,
+            sales_count=0,
+            worked_hours=10.5,
+            fixed_work=1680,
+            fixed_cleaning=0,
+            club_shift_key="1:2026-10-12",
+        )
+        link = self.storage.get_link(10)
+        assert link is not None
+        synced, error, new_ids = sync_admin_shifts(
+            FakeLangame([early, later]), self.storage, self.settings, link
+        )
+        self.assertIsNone(error)
+        self.assertEqual(synced, 0)
+        self.assertEqual(new_ids, [])
+        self.assertIsNone(self.storage.get_shift_earning(140))
+        self.assertEqual(self.storage.sum_bar_sale_credits_for_shift(10, 140), 0)
+        night = self.storage.get_shift_earning(141)
+        self.assertIsNotNone(night)
+        assert night is not None
+        self.assertEqual(night.fixed_cleaning, 0)
+        self.assertAlmostEqual(night.worked_hours, 12)
+        self.assertAlmostEqual(night.fixed_work, 2000)
+
+    def test_open_shift_before_15_shows_no_pay(self) -> None:
+        early = shift(140, 10, datetime(2026, 10, 12, 14, 0, tzinfo=TZ), None)
+        self.storage.link_admin(10, 10, "day@club.ru", "День")
+        link = self.storage.get_link(10)
+        assert link is not None
+        stats = compute_open_shift_stats(
+            FakeLangame([early]), self.storage, self.settings, link, early
+        )
+        self.assertEqual(stats.bar_bonus, 0)
+        self.assertEqual(stats.fixed_share.fixed_total, 0)
+        payload = open_shift_to_dict(stats, self.settings)
+        self.assertEqual(payload["unpaid_reason"], "Смена открыта до 15:00 и в оплату не входит")

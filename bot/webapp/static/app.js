@@ -322,6 +322,9 @@
     if (shift.fines) rows.push(kvRow("Штрафы", `−${money(shift.fines)}`, { neg: true }));
     rows.push(kvRow("Ожидаемая выплата", money(shift.net), { total: true }));
     const card = kvCard(rows, cardHead(title || `Смена #${shift.shift_id}`, badge("● открыта", "green")));
+    if (shift.unpaid_reason) {
+      card.append(el("div", { class: "note" }, shift.unpaid_reason));
+    }
     if (shift.group_size > 1) {
       card.append(el("div", { class: "note" }, `В клубной смене ${shift.group_size} админа(ов) — фикс пересчитается по часам после закрытия.`));
     }

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from bot.config import Settings
@@ -9,6 +9,8 @@ from bot.langame_api import WorkingShift
 
 # Shifts starting before this hour (local) belong to previous club day.
 CLUB_DAY_ROLLOVER_HOUR = 10
+# A shift opened before this time is not paid: fixed, cleaning, and bar bonus.
+PAID_SHIFT_START = time(15, 0)
 
 
 @dataclass(frozen=True)
@@ -37,11 +39,28 @@ def shift_worked_hours(shift: WorkingShift) -> float:
     return round_hours_to_quarter(delta.total_seconds() / 3600)
 
 
-def club_shift_key(shift: WorkingShift, settings: Settings) -> str | None:
+def local_shift_start(shift: WorkingShift, settings: Settings) -> datetime | None:
     if shift.date_start is None:
         return None
     tz = ZoneInfo(settings.settlement_timezone)
-    local_start = shift.date_start.astimezone(tz)
+    # LANGAME sends naive club-local times. Label them as the settlement zone
+    # instead of converting from the server zone.
+    if shift.date_start.tzinfo is None:
+        return shift.date_start.replace(tzinfo=tz)
+    return shift.date_start.astimezone(tz)
+
+
+def shift_opened_before_paid_start(shift: WorkingShift, settings: Settings) -> bool:
+    local_start = local_shift_start(shift, settings)
+    if local_start is None:
+        return False
+    return local_start.time() < PAID_SHIFT_START
+
+
+def club_shift_key(shift: WorkingShift, settings: Settings) -> str | None:
+    local_start = local_shift_start(shift, settings)
+    if local_start is None:
+        return None
     day = local_start.date()
     if local_start.hour < CLUB_DAY_ROLLOVER_HOUR:
         day -= timedelta(days=1)

@@ -43,18 +43,22 @@ class FakeLangame:
             AdminUser(id=501, email="admin@club.ru", username="Админ Иван"),
             AdminUser(id=502, email="other@club.ru", username="Другой"),
         ]
+        # Paid shifts start at 15:00. Keep the fixture on the previous day so
+        # the closed shift is always 12 hours and already finished.
+        day = (now - timedelta(days=1)).date()
+        closed_start = datetime(day.year, day.month, day.day, 15, 0, tzinfo=TZ)
         self.closed_shift = WorkingShift(
             id=7001,
             user_id=501,
             club_id=1,
-            date_start=now - timedelta(hours=14),
-            date_stop=now - timedelta(hours=2),
+            date_start=closed_start,
+            date_stop=closed_start + timedelta(hours=12),
         )
         self.open_shift = WorkingShift(
             id=7002,
             user_id=501,
             club_id=1,
-            date_start=now - timedelta(hours=1),
+            date_start=datetime(day.year, day.month, day.day, 18, 0, tzinfo=TZ),
             date_stop=None,
             cash_nal=1000,
             cash_beznal=3000,
