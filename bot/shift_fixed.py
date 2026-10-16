@@ -9,7 +9,9 @@ from bot.langame_api import WorkingShift
 
 # Shifts starting before this hour (local) belong to previous club day.
 CLUB_DAY_ROLLOVER_HOUR = 10
-# Paid window ends the next morning: weekdays at 03:00, Friday and Saturday at 08:00.
+# Paid window is 15:00–03:00, and 15:00–08:00 on Friday and Saturday.
+# Opening earlier does not earn the time before 15:00.
+PAY_START_HOUR = 15
 WEEKDAY_CUTOFF_HOUR = 3
 WEEKEND_CUTOFF_HOUR = 8
 WEEKEND_CLUB_DAYS = (4, 5)  # Friday, Saturday
@@ -55,6 +57,10 @@ def is_weekend_club_day(day) -> bool:
     return day.weekday() in WEEKEND_CLUB_DAYS
 
 
+def shift_pay_start(day, tz: ZoneInfo) -> datetime:
+    return datetime(day.year, day.month, day.day, PAY_START_HOUR, 0, tzinfo=tz)
+
+
 def shift_pay_cutoff(day, tz: ZoneInfo) -> datetime:
     hour = WEEKEND_CUTOFF_HOUR if is_weekend_club_day(day) else WEEKDAY_CUTOFF_HOUR
     morning = day + timedelta(days=1)
@@ -72,7 +78,7 @@ def billable_shift_hours(
     *,
     until: datetime | None = None,
 ) -> float:
-    """Hours that earn fixed pay: stop at 03:00, or 08:00 on Friday and Saturday."""
+    """Hours inside 15:00–03:00, or 15:00–08:00 on Friday and Saturday."""
     if shift.date_start is None:
         return 0.0
     day = club_day_date(shift, settings)
@@ -86,10 +92,11 @@ def billable_shift_hours(
         until = _as_club_time(shift.date_stop, tz)
     else:
         until = _as_club_time(until, tz)
+    paid_from = max(start, shift_pay_start(day, tz))
     paid_until = min(until, shift_pay_cutoff(day, tz))
-    if paid_until <= start:
+    if paid_until <= paid_from:
         return 0.0
-    return round_hours_to_quarter((paid_until - start).total_seconds() / 3600)
+    return round_hours_to_quarter((paid_until - paid_from).total_seconds() / 3600)
 
 
 def shift_worked_hours(shift: WorkingShift, settings: Settings | None = None) -> float:
