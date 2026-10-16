@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 from datetime import date, timedelta
 
+from telegram import Bot
 from telegram.ext import ContextTypes
 
 from bot.config import Settings
 from bot.langame_api import LangameApiError, LangameClient, WorkingShift, sale_counts_as_bar
-from bot.messaging import send as send_message
+from bot.messaging import send as send_message, send_via_bot
 from bot.ledger import find_open_shift, shift_eligible_for_earnings, sync_admin_shifts
 from bot.services import get_bar_bonus_percent
 from bot.storage import ROLE_ADMIN, Storage
@@ -140,7 +141,7 @@ def sync_new_bar_sales(
 
 
 async def notify_admin_shift_closed(
-    context: ContextTypes.DEFAULT_TYPE,
+    bot: Bot,
     storage: Storage,
     telegram_id: int,
     shift_id: int,
@@ -157,7 +158,7 @@ async def notify_admin_shift_closed(
         fines=fines,
     )
     try:
-        await send_message(context, telegram_id, text)
+        await send_via_bot(bot, telegram_id, text)
     except Exception as exc:
         logger.warning("Failed to notify admin %s about shift #%s: %s", telegram_id, shift_id, exc)
 
@@ -199,6 +200,6 @@ async def poll_bar_sales(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.warning("Shift sync failed for %s: %s", link.telegram_id, error)
             continue
         for shift_id in synced_shift_ids:
-            await notify_admin_shift_closed(context, storage, link.telegram_id, shift_id)
+            await notify_admin_shift_closed(context.bot, storage, link.telegram_id, shift_id)
 
     await poll_shift_notifications(context)

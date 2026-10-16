@@ -122,10 +122,6 @@ class Storage:
         )
         self._ensure_column("admin_links", "role", "TEXT NOT NULL DEFAULT 'admin'")
         self._ensure_column("fines", "telegram_id", "INTEGER")
-        self._ensure_column("shift_earnings", "worked_hours", "REAL NOT NULL DEFAULT 0")
-        self._ensure_column("shift_earnings", "fixed_work", "REAL NOT NULL DEFAULT 0")
-        self._ensure_column("shift_earnings", "fixed_cleaning", "REAL NOT NULL DEFAULT 0")
-        self._ensure_column("shift_earnings", "club_shift_key", "TEXT")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS shift_earnings (
@@ -143,6 +139,10 @@ class Storage:
             )
             """
         )
+        self._ensure_column("shift_earnings", "worked_hours", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "fixed_work", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "fixed_cleaning", "REAL NOT NULL DEFAULT 0")
+        self._ensure_column("shift_earnings", "club_shift_key", "TEXT")
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS balance_settlements (
@@ -510,6 +510,16 @@ class Storage:
         ).fetchone()
         return float(row["total"])
 
+    def delete_shift_earning(self, shift_id: int) -> bool:
+        cursor = self._conn.execute(
+            "DELETE FROM shift_earnings WHERE shift_id = ?",
+            (shift_id,),
+        )
+        deleted = cursor.rowcount > 0
+        if deleted:
+            self._conn.commit()
+        return deleted
+
     def has_shift_earning(self, shift_id: int) -> bool:
         row = self._conn.execute(
             "SELECT 1 FROM shift_earnings WHERE shift_id = ?",
@@ -644,6 +654,34 @@ class Storage:
         params.append(limit)
         rows = self._conn.execute(query, params).fetchall()
         return [self._row_to_shift_earning(row) for row in rows]
+
+    def list_shift_days(
+        self,
+        date_from: date,
+        date_to: date,
+        telegram_id: int | None = None,
+    ) -> list[str]:
+        query = """
+            SELECT DISTINCT substr(shift_start, 1, 10) AS day
+            FROM shift_earnings
+            WHERE shift_start IS NOT NULL
+              AND date(substr(shift_start, 1, 10)) >= date(?)
+              AND date(substr(shift_start, 1, 10)) <= date(?)
+        """
+        params: list[object] = [date_from.isoformat(), date_to.isoformat()]
+        if telegram_id is not None:
+            query += " AND telegram_id = ?"
+            params.append(telegram_id)
+        rows = self._conn.execute(query + " ORDER BY day", params).fetchall()
+        return [str(row["day"]) for row in rows]
+
+    def count_active_fines(self, telegram_id: int | None = None) -> int:
+        query = "SELECT COUNT(*) AS total FROM fines WHERE cancelled = 0"
+        params: list[object] = []
+        if telegram_id is not None:
+            query += " AND telegram_id = ?"
+            params.append(telegram_id)
+        return int(self._conn.execute(query, params).fetchone()["total"])
 
     def count_shift_earnings(self, telegram_id: int) -> int:
         row = self._conn.execute(

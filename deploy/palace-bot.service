@@ -1,5 +1,5 @@
 [Unit]
-Description=Palace Adms Telegram Bot
+Description=Palace Adms Telegram Bot + Mini App
 After=network.target
 
 [Service]

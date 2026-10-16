@@ -1,19 +1,7 @@
 from __future__ import annotations
 
-from telegram import Update
-from telegram.ext import ContextTypes
-
 from bot.config import Settings
-from bot.messaging import reply as reply_message
 from bot.storage import ROLE_ADMIN, ROLE_DEVELOPER, ROLE_MANAGER, Storage, UserLink
-from bot.texts import (
-    access_denied,
-    developer_only,
-    link_langame_first,
-    link_langame_for_salary,
-    manager_only,
-    not_registered,
-)
 
 
 def is_developer(settings: Settings, telegram_id: int) -> bool:
@@ -84,74 +72,3 @@ def needs_langame_link(settings: Settings, storage: Storage, telegram_id: int) -
     if link is not None:
         return link.user_id == 0
     return has_manager_access(settings, storage, telegram_id)
-
-
-async def deny_access(update: Update) -> None:
-    await reply_message(update.message, access_denied())
-
-
-async def require_access(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-) -> bool:
-    settings: Settings = context.application.bot_data["settings"]
-    storage: Storage = context.application.bot_data["storage"]
-    if can_use_bot(settings, storage, update.effective_user.id):
-        return True
-    await deny_access(update)
-    return False
-
-
-async def require_link(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-) -> UserLink | None:
-    settings: Settings = context.application.bot_data["settings"]
-    storage: Storage = context.application.bot_data["storage"]
-    telegram_id = update.effective_user.id
-    link = storage.get_link(telegram_id)
-    if link:
-        return link
-    if has_manager_access(settings, storage, telegram_id):
-        await reply_message(update.message, link_langame_first())
-        return None
-    await reply_message(update.message, not_registered())
-    return None
-
-
-async def require_langame_link(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-) -> UserLink | None:
-    link = await require_link(update, context)
-    if link is None:
-        return None
-    if link.user_id == 0:
-        await reply_message(update.message, link_langame_for_salary())
-        return None
-    return link
-
-
-async def require_manager(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-) -> bool:
-    settings: Settings = context.application.bot_data["settings"]
-    storage: Storage = context.application.bot_data["storage"]
-
-    if not has_manager_access(settings, storage, update.effective_user.id):
-        await reply_message(update.message, manager_only())
-        return False
-
-    return True
-
-
-async def require_developer(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-) -> bool:
-    settings: Settings = context.application.bot_data["settings"]
-    if is_developer(settings, update.effective_user.id):
-        return True
-    await reply_message(update.message, developer_only())
-    return False

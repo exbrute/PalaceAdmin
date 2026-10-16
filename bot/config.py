@@ -25,6 +25,9 @@ class Settings:
     developer_telegram_ids: frozenset[int]
     settlement_timezone: str
     earnings_start_date: date | None
+    webapp_url: str = ""
+    webapp_host: str = "127.0.0.1"
+    webapp_port: int = 8080
 
 
 def _parse_date(raw: str) -> date | None:
@@ -68,4 +71,7 @@ def get_settings() -> Settings:
         developer_telegram_ids=_parse_id_set(os.getenv("DEVELOPER_TELEGRAM_IDS", "")),
         settlement_timezone=os.getenv("SETTLEMENT_TIMEZONE", "Europe/Moscow").strip(),
         earnings_start_date=_parse_date(os.getenv("EARNINGS_START_DATE", "")),
+        webapp_url=os.getenv("WEBAPP_URL", "").strip().rstrip("/"),
+        webapp_host=os.getenv("WEBAPP_HOST", "127.0.0.1").strip(),
+        webapp_port=int(os.getenv("WEBAPP_PORT", "8080")),
     )

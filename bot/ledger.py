@@ -14,9 +14,11 @@ from bot.salary import (
 from bot.services import format_percent, get_bar_bonus_percent
 from bot.shift_fixed import (
     FixedShare,
+    billable_shift_hours,
     club_shift_key,
     distribute_club_shift_fixed,
     estimate_open_shift_fixed,
+    first_opener_id,
 )
 from bot.storage import ShiftEarning, Storage, UserLink
 
@@ -94,14 +96,13 @@ def _format_hours(hours: float) -> str:
     return text.replace(".", ",")
 
 
-def format_fixed_breakdown(
+def fixed_breakdown_parts(
     settings: Settings,
     *,
     worked_hours: float,
     fixed_work: float,
     fixed_cleaning: float,
-    fixed_total: float,
-) -> str:
+) -> list[str]:
     hourly = settings.fixed_shift_work / settings.shift_standard_hours
     parts: list[str] = []
     if fixed_work > 0:
@@ -110,6 +111,23 @@ def format_fixed_breakdown(
         )
     if fixed_cleaning > 0:
         parts.append(f"уборка {format_money(fixed_cleaning)}")
+    return parts
+
+
+def format_fixed_breakdown(
+    settings: Settings,
+    *,
+    worked_hours: float,
+    fixed_work: float,
+    fixed_cleaning: float,
+    fixed_total: float,
+) -> str:
+    parts = fixed_breakdown_parts(
+        settings,
+        worked_hours=worked_hours,
+        fixed_work=fixed_work,
+        fixed_cleaning=fixed_cleaning,
+    )
     if parts:
         return f"{format_money(fixed_total)} ({' + '.join(parts)})"
     return format_money(fixed_total)
@@ -163,7 +181,11 @@ def recalculate_club_shift_group(
     if not group:
         return [], None
 
-    shares = distribute_club_shift_fixed(group, settings)
+    # Hourly pay stays inside the linked closed group. Cleaning does not:
+    # the opener is the earliest shift of the club day, even if that shift
+    # is still open or belongs to an admin this bot does not know.
+    opener_id = first_opener_id(all_shifts, settings, club_key)
+    shares = distribute_club_shift_fixed(group, settings, first_opener_id=opener_id)
     newly_synced: list[int] = []
 
     for shift in group:
@@ -203,6 +225,32 @@ def recalculate_club_shift_group(
     return newly_synced, None
 
 
+def _hours_mismatch(
+    storage: Storage,
+    settings: Settings,
+    shift: WorkingShift,
+) -> bool:
+    earning = storage.get_shift_earning(shift.id)
+    if earning is None:
+        return False
+    expected = billable_shift_hours(shift, settings)
+    return abs(earning.worked_hours - expected) > 0.001
+
+
+def _cleaning_assignment_mismatch(
+    storage: Storage,
+    settings: Settings,
+    all_shifts: list[WorkingShift],
+    shift: WorkingShift,
+    club_key: str,
+) -> bool:
+    earning = storage.get_shift_earning(shift.id)
+    if earning is None:
+        return False
+    should_clean = first_opener_id(all_shifts, settings, club_key) == shift.id
+    return (earning.fixed_cleaning > 0) != should_clean
+
+
 def sync_admin_shifts(
     api: LangameClient,
     storage: Storage,
@@ -222,10 +270,14 @@ def sync_admin_shifts(
     for shift in user_shifts:
         if not shift_eligible_for_earnings(shift, settings):
             continue
-        if storage.has_shift_earning(shift.id):
-            continue
         key = club_shift_key(shift, settings)
-        if key:
+        if not key:
+            continue
+        if (
+            not storage.has_shift_earning(shift.id)
+            or _cleaning_assignment_mismatch(storage, settings, all_shifts, shift, key)
+            or _hours_mismatch(storage, settings, shift)
+        ):
             keys_to_process.add(key)
 
     synced = 0
@@ -268,7 +320,8 @@ def sync_shift_by_id(
     if shift.date_stop is None:
         return None, f"{e('refresh')} Смена ещё не закрыта — фикс начислится после закрытия", None
     if not shift_eligible_for_earnings(shift, settings):
-        return None, f"{e('cancel')} Смена до {settings.earnings_start_date.strftime('%d.%m.%Y')} не учитывается", None
+        started = settings.earnings_start_date.strftime("%d.%m.%Y") if settings.earnings_start_date else ""
+        return None, f"{e('cancel')} Смена до {started} не учитывается", None
 
     club_key = club_shift_key(shift, settings)
     if club_key is None:
@@ -443,7 +496,36 @@ def format_manager_current_shift_summary(
     return "\n\n".join(sections) if sections else None
 
 
-def format_open_shift_line(
+@dataclass(frozen=True)
+class OpenShiftStats:
+    shift: WorkingShift
+    bar_total: float
+    bar_bonus: float
+    sales_count: int
+    bar_percent: float
+    fixed_share: FixedShare
+    fixed_text: str
+    fines: float
+    net: float
+    group_size: int
+    nal: float | None = None
+    beznal: float | None = None
+
+    @property
+    def total_revenue(self) -> float | None:
+        if self.nal is None or self.beznal is None:
+            return None
+        return self.nal + self.beznal
+
+    @property
+    def bar_share_percent(self) -> float | None:
+        total = self.total_revenue
+        if not total or total <= 0:
+            return None
+        return self.bar_total / total * 100
+
+
+def compute_open_shift_stats(
     api: LangameClient,
     storage: Storage,
     settings: Settings,
@@ -451,7 +533,7 @@ def format_open_shift_line(
     shift: WorkingShift,
     *,
     include_revenue_share: bool = False,
-) -> str | None:
+) -> OpenShiftStats:
     try:
         all_shifts = api.get_working_shifts()
     except LangameApiError:
@@ -469,7 +551,8 @@ def format_open_shift_line(
         shift, sales, settings, storage
     )
     group = _linked_club_group(all_shifts, storage, settings, shift)
-    is_first_opener = bool(group) and group[0].id == shift.id
+    opener_id = first_opener_id(all_shifts, settings, club_shift_key(shift, settings))
+    is_first_opener = opener_id == shift.id
     fixed_share = estimate_open_shift_fixed(
         shift, settings=settings, is_first_opener=is_first_opener
     )
@@ -481,42 +564,73 @@ def format_open_shift_line(
         fixed_total=fixed_share.fixed_total,
     )
     fines = storage.sum_fines(link.telegram_id, shift.id)
-    bar_percent = format_percent(get_bar_bonus_percent(storage, settings))
+
+    nal: float | None = None
+    beznal: float | None = None
+    if include_revenue_share:
+        nal, beznal = resolve_shift_nal_beznal(api, shift, date_from, date_to)
+
+    return OpenShiftStats(
+        shift=shift,
+        bar_total=bar_total,
+        bar_bonus=bar_bonus,
+        sales_count=sales_count,
+        bar_percent=get_bar_bonus_percent(storage, settings),
+        fixed_share=fixed_share,
+        fixed_text=fixed_text,
+        fines=fines,
+        net=bar_bonus + fixed_share.fixed_total - fines,
+        group_size=len(group),
+        nal=nal,
+        beznal=beznal,
+    )
+
+
+def format_open_shift_line(
+    api: LangameClient,
+    storage: Storage,
+    settings: Settings,
+    link: UserLink,
+    shift: WorkingShift,
+    *,
+    include_revenue_share: bool = False,
+) -> str | None:
+    stats = compute_open_shift_stats(
+        api, storage, settings, link, shift, include_revenue_share=include_revenue_share
+    )
+    bar_percent = format_percent(stats.bar_percent)
 
     start = "—"
     if shift.date_start:
         start = shift.date_start.strftime("%d.%m.%Y %H:%M")
 
-    net = bar_bonus + fixed_share.fixed_total - fines
     lines = [
         f"{e('check')} Текущая смена (открыта)",
         "",
         f"{e('gear')} Смена #{shift.id}",
         f"{e('date')} Начало: {start}",
-        f"{e('burger')} Продажи бара: {format_money(bar_total)} ({sales_count} поз.)",
+        f"{e('burger')} Продажи бара: {format_money(stats.bar_total)} ({stats.sales_count} поз.)",
     ]
     if include_revenue_share:
-        nal, beznal = resolve_shift_nal_beznal(api, shift, date_from, date_to)
-        total_revenue = nal + beznal
+        total_revenue = stats.total_revenue or 0.0
         if total_revenue > 0:
-            bar_share = bar_total / total_revenue * 100
             lines.extend([
-                f"{e('money')} Нал: {format_money(nal)}",
-                f"{e('card')} Безнал: {format_money(beznal)}",
+                f"{e('money')} Нал: {format_money(stats.nal or 0.0)}",
+                f"{e('card')} Безнал: {format_money(stats.beznal or 0.0)}",
                 f"{e('chart_up')} Общая выручка: {format_money(total_revenue)}",
-                f"{e('chart')} Бар от выручки: {format_percent(bar_share)}%",
+                f"{e('chart')} Бар от выручки: {format_percent(stats.bar_share_percent or 0.0)}%",
             ])
         else:
             lines.append(f"{e('chart')} Бар от выручки: — (выручка пока 0 ₽)")
     lines.extend([
-        f"{e('money')} {bar_percent}% с бара: {format_money(bar_bonus)} — начисляется сразу",
-        f"{e('refresh')} Фикс (ориентир): {fixed_text} — после закрытия",
+        f"{e('money')} {bar_percent}% с бара: {format_money(stats.bar_bonus)} — начисляется сразу",
+        f"{e('refresh')} Фикс (ориентир): {stats.fixed_text} — после закрытия",
     ])
-    if len(group) > 1:
-        lines.append(f"{e('info')} В клубной смене {len(group)} админов — фикс пересчитается по часам")
-    if fines:
-        lines.append(f"{e('warning')} Штрафы: −{format_money(fines)}")
-    lines.append(f"{e('money_bag')} Ожидаемая выплата за смену: {format_money(net)}")
+    if stats.group_size > 1:
+        lines.append(f"{e('info')} В клубной смене {stats.group_size} админов — фикс пересчитается по часам")
+    if stats.fines:
+        lines.append(f"{e('warning')} Штрафы: −{format_money(stats.fines)}")
+    lines.append(f"{e('money_bag')} Ожидаемая выплата за смену: {format_money(stats.net)}")
     return "\n".join(lines)
 
 
