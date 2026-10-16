@@ -10,12 +10,11 @@ from bot.config import Settings
 from bot.langame_api import WorkingShift
 from bot.ledger import compute_open_shift_stats, recalculate_club_shift_group, sync_admin_shifts
 from bot.shift_fixed import (
+    billable_shift_hours,
     club_shift_key,
     distribute_club_shift_fixed,
     first_opener_id,
-    shift_opened_before_paid_start,
 )
-from bot.webapp.serializers import open_shift_to_dict
 from bot.storage import Storage, UserLink
 
 TZ = ZoneInfo("Europe/Moscow")
@@ -134,8 +133,9 @@ class CleaningAssignmentTests(unittest.TestCase):
             first_opener_id=first_opener_id([earlier, later], self.settings, key),
         )
         self.assertEqual(shares[464].fixed_cleaning, 0)
-        self.assertAlmostEqual(shares[464].worked_hours, 6.25)
-        self.assertAlmostEqual(shares[464].fixed_work, 1041.67)
+        # 21:35–03:50 is clipped at 03:00: 5 h 25 min rounds to 5.5 h.
+        self.assertAlmostEqual(shares[464].worked_hours, 5.5)
+        self.assertAlmostEqual(shares[464].fixed_work, 916.67)
 
         _, error = recalculate_club_shift_group(
             FakeLangame([earlier, later]), self.storage, self.settings, [earlier, later], key
@@ -145,7 +145,8 @@ class CleaningAssignmentTests(unittest.TestCase):
         self.assertIsNotNone(earning)
         assert earning is not None
         self.assertEqual(earning.fixed_cleaning, 0)
-        self.assertAlmostEqual(earning.fixed_work, 1041.67)
+        self.assertAlmostEqual(earning.worked_hours, 5.5)
+        self.assertAlmostEqual(earning.fixed_work, 916.67)
         self.assertIsNone(self.storage.get_shift_earning(100))
 
     def test_shift_before_rollover_is_previous_club_day(self) -> None:
@@ -245,8 +246,9 @@ class CleaningAssignmentTests(unittest.TestCase):
         self.assertIsNotNone(earning)
         assert earning is not None
         self.assertEqual(earning.fixed_cleaning, 0)
-        self.assertAlmostEqual(earning.fixed_work, 1041.67)
-        self.assertAlmostEqual(earning.fixed_salary, 1041.67)
+        self.assertAlmostEqual(earning.worked_hours, 5.5)
+        self.assertAlmostEqual(earning.fixed_work, 916.67)
+        self.assertAlmostEqual(earning.fixed_salary, 916.67)
         self.assertGreater(api.sales_calls, 0)
 
     def test_sync_leaves_correct_second_opener_untouched(self) -> None:
@@ -271,11 +273,11 @@ class CleaningAssignmentTests(unittest.TestCase):
             shift_stop=later.date_stop.isoformat(timespec="seconds") if later.date_stop else None,
             bar_sales=999,
             bar_bonus=0,
-            fixed_salary=1041.67,
-            gross_amount=1041.67,
+            fixed_salary=916.67,
+            gross_amount=916.67,
             sales_count=0,
-            worked_hours=6.25,
-            fixed_work=1041.67,
+            worked_hours=5.5,
+            fixed_work=916.67,
             fixed_cleaning=0,
             club_shift_key="1:2026-09-21",
         )
@@ -289,102 +291,77 @@ class CleaningAssignmentTests(unittest.TestCase):
         self.assertEqual(earning.fixed_cleaning, 0)
         self.assertEqual(api.sales_calls, 0)
 
-    def test_shift_opened_before_15_is_not_paid(self) -> None:
+    def test_hours_before_15_and_after_cutoff_are_not_paid(self) -> None:
+        # Monday 12 Oct 2026. Open at 14:00, close at 05:00: pay 15:00–03:00.
         early = shift(
             10,
             1,
-            datetime(2026, 10, 12, 14, 59, tzinfo=TZ),
-            datetime(2026, 10, 13, 3, 0, tzinfo=TZ),
+            datetime(2026, 10, 12, 14, 0, tzinfo=TZ),
+            datetime(2026, 10, 13, 5, 0, tzinfo=TZ),
         )
-        on_time = shift(
-            11,
-            1,
-            datetime(2026, 10, 12, 15, 0, tzinfo=TZ),
-            datetime(2026, 10, 13, 3, 0, tzinfo=TZ),
-        )
-        self.assertTrue(shift_opened_before_paid_start(early, self.settings))
-        self.assertFalse(shift_opened_before_paid_start(on_time, self.settings))
+        self.assertAlmostEqual(billable_shift_hours(early, self.settings), 12)
+        shares = distribute_club_shift_fixed([early], self.settings)
+        self.assertAlmostEqual(shares[10].fixed_work, 2000)
+        self.assertEqual(shares[10].fixed_cleaning, 500)
 
-    def test_sync_drops_shift_opened_before_15_and_keeps_later_split(self) -> None:
+    def test_friday_shift_pays_until_morning_like_misha(self) -> None:
+        # 2 Oct 2026 is Friday. 14:06–06:07 is 15.25 paid hours from 15:00.
+        first = shift(
+            475,
+            150,
+            datetime(2026, 10, 2, 14, 6, 12, tzinfo=TZ),
+            datetime(2026, 10, 3, 6, 7, 41, tzinfo=TZ),
+        )
+        second = shift(
+            482,
+            150,
+            datetime(2026, 10, 9, 14, 1, 44, tzinfo=TZ),
+            datetime(2026, 10, 10, 5, 38, 6, tzinfo=TZ),
+        )
+        first_share = distribute_club_shift_fixed([first], self.settings)[475]
+        second_share = distribute_club_shift_fixed([second], self.settings)[482]
+        self.assertAlmostEqual(first_share.worked_hours, 15.25)
+        self.assertAlmostEqual(first_share.fixed_work, 2541.67)
+        self.assertAlmostEqual(second_share.worked_hours, 14.75)
+        self.assertAlmostEqual(second_share.fixed_work, 2458.33)
+        gross = (
+            first_share.fixed_total
+            + second_share.fixed_total
+            + 606
+            + 544
+        )
+        self.assertAlmostEqual(gross, 7150)
+
+    def test_sync_recalculates_when_stored_hours_ignore_pay_window(self) -> None:
         early = shift(
             140,
             10,
             datetime(2026, 10, 12, 14, 0, tzinfo=TZ),
-            datetime(2026, 10, 12, 17, 0, tzinfo=TZ),
-        )
-        later = shift(
-            141,
-            20,
-            datetime(2026, 10, 12, 17, 0, tzinfo=TZ),
             datetime(2026, 10, 13, 5, 0, tzinfo=TZ),
         )
         self.storage.link_admin(10, 10, "day@club.ru", "День")
-        self.storage.link_admin(20, 20, "night@club.ru", "Ночь")
         self.storage.add_shift_earning(
             shift_id=140,
             telegram_id=10,
             langame_user_id=10,
             shift_start=early.date_start.isoformat(timespec="seconds"),
             shift_stop=early.date_stop.isoformat(timespec="seconds") if early.date_stop else None,
-            bar_sales=100,
-            bar_bonus=20,
-            fixed_salary=1000,
-            gross_amount=1020,
-            sales_count=1,
-            worked_hours=3,
-            fixed_work=500,
+            bar_sales=0,
+            bar_bonus=0,
+            fixed_salary=2500,
+            gross_amount=2500,
+            sales_count=0,
+            worked_hours=15,
+            fixed_work=2000,
             fixed_cleaning=500,
             club_shift_key="1:2026-10-12",
         )
-        self.storage.add_bar_sale_credit(
-            sale_id=1,
-            telegram_id=10,
-            shift_id=140,
-            sale_amount=100,
-            bonus_amount=20,
-        )
-        self.storage.add_shift_earning(
-            shift_id=141,
-            telegram_id=20,
-            langame_user_id=20,
-            shift_start=later.date_start.isoformat(timespec="seconds"),
-            shift_stop=later.date_stop.isoformat(timespec="seconds") if later.date_stop else None,
-            bar_sales=0,
-            bar_bonus=0,
-            fixed_salary=1680,
-            gross_amount=1680,
-            sales_count=0,
-            worked_hours=10.5,
-            fixed_work=1680,
-            fixed_cleaning=0,
-            club_shift_key="1:2026-10-12",
-        )
         link = self.storage.get_link(10)
         assert link is not None
-        synced, error, new_ids = sync_admin_shifts(
-            FakeLangame([early, later]), self.storage, self.settings, link
-        )
+        _, error, _ = sync_admin_shifts(FakeLangame([early]), self.storage, self.settings, link)
         self.assertIsNone(error)
-        self.assertEqual(synced, 0)
-        self.assertEqual(new_ids, [])
-        self.assertIsNone(self.storage.get_shift_earning(140))
-        self.assertEqual(self.storage.sum_bar_sale_credits_for_shift(10, 140), 0)
-        night = self.storage.get_shift_earning(141)
-        self.assertIsNotNone(night)
-        assert night is not None
-        self.assertEqual(night.fixed_cleaning, 0)
-        self.assertAlmostEqual(night.worked_hours, 12)
-        self.assertAlmostEqual(night.fixed_work, 2000)
-
-    def test_open_shift_before_15_shows_no_pay(self) -> None:
-        early = shift(140, 10, datetime(2026, 10, 12, 14, 0, tzinfo=TZ), None)
-        self.storage.link_admin(10, 10, "day@club.ru", "День")
-        link = self.storage.get_link(10)
-        assert link is not None
-        stats = compute_open_shift_stats(
-            FakeLangame([early]), self.storage, self.settings, link, early
-        )
-        self.assertEqual(stats.bar_bonus, 0)
-        self.assertEqual(stats.fixed_share.fixed_total, 0)
-        payload = open_shift_to_dict(stats, self.settings)
-        self.assertEqual(payload["unpaid_reason"], "Смена открыта до 15:00 и в оплату не входит")
+        earning = self.storage.get_shift_earning(140)
+        assert earning is not None
+        self.assertAlmostEqual(earning.worked_hours, 12)
+        self.assertAlmostEqual(earning.fixed_work, 2000)
+        self.assertEqual(earning.fixed_cleaning, 500)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from bot.config import Settings
@@ -9,8 +9,12 @@ from bot.langame_api import WorkingShift
 
 # Shifts starting before this hour (local) belong to previous club day.
 CLUB_DAY_ROLLOVER_HOUR = 10
-# A shift opened before this time is not paid: fixed, cleaning, and bar bonus.
-PAID_SHIFT_START = time(15, 0)
+# Paid window is 15:00–03:00, and 15:00–08:00 on Friday and Saturday.
+# Opening earlier does not earn the time before 15:00.
+PAY_START_HOUR = 15
+WEEKDAY_CUTOFF_HOUR = 3
+WEEKEND_CUTOFF_HOUR = 8
+WEEKEND_CLUB_DAYS = (4, 5)  # Friday, Saturday
 
 
 @dataclass(frozen=True)
@@ -32,38 +36,87 @@ def round_hours_to_quarter(hours: float) -> float:
     return quarters / 4
 
 
-def shift_worked_hours(shift: WorkingShift) -> float:
-    if shift.date_start is None or shift.date_stop is None:
-        return 0.0
-    delta = shift.date_stop - shift.date_start
-    return round_hours_to_quarter(delta.total_seconds() / 3600)
+def _as_club_time(value: datetime, tz: ZoneInfo) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=tz)
+    return value.astimezone(tz)
 
 
 def local_shift_start(shift: WorkingShift, settings: Settings) -> datetime | None:
     if shift.date_start is None:
         return None
-    tz = ZoneInfo(settings.settlement_timezone)
-    # LANGAME sends naive club-local times. Label them as the settlement zone
-    # instead of converting from the server zone.
-    if shift.date_start.tzinfo is None:
-        return shift.date_start.replace(tzinfo=tz)
-    return shift.date_start.astimezone(tz)
+    return _as_club_time(shift.date_start, ZoneInfo(settings.settlement_timezone))
 
 
-def shift_opened_before_paid_start(shift: WorkingShift, settings: Settings) -> bool:
-    local_start = local_shift_start(shift, settings)
-    if local_start is None:
-        return False
-    return local_start.time() < PAID_SHIFT_START
-
-
-def club_shift_key(shift: WorkingShift, settings: Settings) -> str | None:
+def club_day_date(shift: WorkingShift, settings: Settings):
     local_start = local_shift_start(shift, settings)
     if local_start is None:
         return None
     day = local_start.date()
     if local_start.hour < CLUB_DAY_ROLLOVER_HOUR:
         day -= timedelta(days=1)
+    return day
+
+
+def is_weekend_club_day(day) -> bool:
+    return day.weekday() in WEEKEND_CLUB_DAYS
+
+
+def shift_pay_start(day, tz: ZoneInfo) -> datetime:
+    return datetime(day.year, day.month, day.day, PAY_START_HOUR, 0, tzinfo=tz)
+
+
+def shift_pay_cutoff(day, tz: ZoneInfo) -> datetime:
+    hour = WEEKEND_CUTOFF_HOUR if is_weekend_club_day(day) else WEEKDAY_CUTOFF_HOUR
+    morning = day + timedelta(days=1)
+    return datetime(morning.year, morning.month, morning.day, hour, 0, tzinfo=tz)
+
+
+def club_day_hour_cap(day, settings: Settings) -> float:
+    extra = WEEKEND_CUTOFF_HOUR - WEEKDAY_CUTOFF_HOUR if is_weekend_club_day(day) else 0
+    return settings.shift_standard_hours + extra
+
+
+def billable_shift_hours(
+    shift: WorkingShift,
+    settings: Settings,
+    *,
+    until: datetime | None = None,
+) -> float:
+    """Hours inside 15:00–03:00, or 15:00–08:00 on Friday and Saturday."""
+    if shift.date_start is None:
+        return 0.0
+    day = club_day_date(shift, settings)
+    if day is None:
+        return 0.0
+    tz = ZoneInfo(settings.settlement_timezone)
+    start = _as_club_time(shift.date_start, tz)
+    if until is None:
+        if shift.date_stop is None:
+            return 0.0
+        until = _as_club_time(shift.date_stop, tz)
+    else:
+        until = _as_club_time(until, tz)
+    paid_from = max(start, shift_pay_start(day, tz))
+    paid_until = min(until, shift_pay_cutoff(day, tz))
+    if paid_until <= paid_from:
+        return 0.0
+    return round_hours_to_quarter((paid_until - paid_from).total_seconds() / 3600)
+
+
+def shift_worked_hours(shift: WorkingShift, settings: Settings | None = None) -> float:
+    if settings is not None:
+        return billable_shift_hours(shift, settings)
+    if shift.date_start is None or shift.date_stop is None:
+        return 0.0
+    delta = shift.date_stop - shift.date_start
+    return round_hours_to_quarter(delta.total_seconds() / 3600)
+
+
+def club_shift_key(shift: WorkingShift, settings: Settings) -> str | None:
+    day = club_day_date(shift, settings)
+    if day is None:
+        return None
     return f"{shift.club_id}:{day.isoformat()}"
 
 
@@ -77,8 +130,10 @@ def estimate_open_shift_fixed(
         return FixedShare(shift.id, 0.0, 0.0, 0.0)
     tz = ZoneInfo(settings.settlement_timezone)
     now = datetime.now(tz)
-    start = shift.date_start.astimezone(tz)
-    hours = round_hours_to_quarter(max(0.0, (now - start).total_seconds() / 3600))
+    day = club_day_date(shift, settings)
+    hours = billable_shift_hours(shift, settings, until=now)
+    if day is not None:
+        hours = min(hours, club_day_hour_cap(day, settings))
     hourly = settings.fixed_shift_work / settings.shift_standard_hours
     fixed_work = round(hours * hourly, 2)
     cleaning = settings.fixed_cleaning if is_first_opener else 0.0
@@ -118,7 +173,7 @@ def distribute_club_shift_fixed(
         return {}
 
     ordered = sorted(shifts, key=lambda item: (item.date_start or datetime.min, item.id))
-    hours_by_shift = {shift.id: shift_worked_hours(shift) for shift in ordered}
+    hours_by_shift = {shift.id: billable_shift_hours(shift, settings) for shift in ordered}
     total_hours = sum(hours_by_shift.values())
     if total_hours <= 0:
         return {
@@ -126,7 +181,9 @@ def distribute_club_shift_fixed(
             for shift in ordered
         }
 
-    billable_hours = min(total_hours, settings.shift_standard_hours)
+    club_day = club_day_date(ordered[0], settings)
+    hour_cap = club_day_hour_cap(club_day, settings) if club_day is not None else settings.shift_standard_hours
+    billable_hours = min(total_hours, hour_cap)
     work_pool = settings.fixed_shift_work * billable_hours / settings.shift_standard_hours
     work_parts = _split_pool(work_pool, [hours_by_shift[shift.id] for shift in ordered])
 
