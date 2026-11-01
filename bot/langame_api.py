@@ -387,10 +387,6 @@ def sale_counts_as_bar(sale: ProductSale) -> bool:
     if sale.cancel != 0:
         return False
     lowered = sale.product_name.lower()
-    # "Чай Липтон … закуп" is a guest bar sale. The short keyword "закуп"
-    # would drop the line and underpay the shift by 20% of it.
-    if "липтон" in lowered and "чай" in lowered:
-        return True
     for keyword in _non_bar_keywords():
         if keyword in lowered:
             return False

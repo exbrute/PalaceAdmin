@@ -1,6 +1,5 @@
 # Any line here excludes product from "bar" calculations.
 # Matching is case-insensitive substring by product name.
-# "Чай Липтон … закуп" stays a bar sale (sale_counts_as_bar).
 
 закупка для сотрудников
 закуп
