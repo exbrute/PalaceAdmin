@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -8,6 +9,11 @@ from typing import Any
 import httpx
 
 from bot.config import Settings
+
+# One button or poll asks for the full shift list several times. LANGAME
+# answers 429 when those pages are fetched back to back.
+_SHIFT_LIST_CACHE_SECONDS = 20.0
+_RATE_LIMIT_RETRIES = 4
 
 
 class LangameApiError(Exception):
@@ -196,6 +202,8 @@ class LangameClient:
             timeout=30.0,
         )
         self._product_names_by_id: dict[int, str] | None = None
+        self._shifts_cache: list[WorkingShift] | None = None
+        self._shifts_cached_at = 0.0
 
     def close(self) -> None:
         self._client.close()
@@ -206,8 +214,31 @@ class LangameClient:
                 "LANGAME_API_TOKEN не настроен. Добавьте ключ в /opt/palace-adms/.env на сервере."
             )
 
-    def _get_paginated(self, path: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    def _get(self, path: str, params: dict[str, Any] | None = None) -> httpx.Response:
         self._ensure_token()
+        delay = 1.0
+        for attempt in range(_RATE_LIMIT_RETRIES + 1):
+            response = self._client.get(path, params=params)
+            if response.status_code == 403:
+                raise LangameApiError("Нет доступа к API. Проверьте LANGAME_API_TOKEN.")
+            if response.status_code != 429:
+                if response.status_code >= 400:
+                    raise LangameApiError("LANGAME временно недоступен. Повторите чуть позже.")
+                return response
+            if attempt >= _RATE_LIMIT_RETRIES:
+                break
+            wait = delay
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    wait = min(max(float(retry_after), 0.5), 15.0)
+                except ValueError:
+                    wait = delay
+            time.sleep(wait)
+            delay = min(delay * 2, 8.0)
+        raise LangameApiError("LANGAME временно ограничил запросы. Подождите минуту и повторите.")
+
+    def _get_paginated(self, path: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         page = 1
         items: list[dict[str, Any]] = []
 
@@ -216,11 +247,7 @@ class LangameClient:
             if params:
                 query.update(params)
 
-            response = self._client.get(path, params=query)
-            if response.status_code == 403:
-                raise LangameApiError("Нет доступа к API. Проверьте LANGAME_API_TOKEN.")
-            response.raise_for_status()
-
+            response = self._get(path, query)
             payload = response.json()
             if not payload.get("status", False):
                 raise LangameApiError("API вернул status=false")
@@ -236,11 +263,7 @@ class LangameClient:
         return items
 
     def get_users(self) -> list[AdminUser]:
-        self._ensure_token()
-        response = self._client.get("/users/list")
-        if response.status_code == 403:
-            raise LangameApiError("Нет доступа к API. Проверьте LANGAME_API_TOKEN.")
-        response.raise_for_status()
+        response = self._get("/users/list")
         payload = response.json()
         if not payload.get("status", False):
             raise LangameApiError("Не удалось получить список пользователей")
@@ -257,6 +280,13 @@ class LangameClient:
         return users
 
     def get_working_shifts(self) -> list[WorkingShift]:
+        now = time.monotonic()
+        if (
+            self._shifts_cache is not None
+            and now - self._shifts_cached_at < _SHIFT_LIST_CACHE_SECONDS
+        ):
+            return list(self._shifts_cache)
+
         raw = self._get_paginated("/working_shifts/list")
         shifts: list[WorkingShift] = []
         for item in raw:
@@ -279,7 +309,9 @@ class LangameClient:
                     close_message=item.get("message"),
                 )
             )
-        return shifts
+        self._shifts_cache = shifts
+        self._shifts_cached_at = time.monotonic()
+        return list(shifts)
 
     def get_product_sales(
         self,
